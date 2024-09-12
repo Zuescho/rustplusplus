@@ -66,14 +66,11 @@ module.exports = {
 
     getServerEmbed: async function (guildId, serverId) {
         const instance = Client.client.getInstance(guildId);
-        //const credentials = InstanceUtils.readCredentialsFile(guildId);
-        const authTokens = InstanceUtils.readAuthTokensFile(guildId);
+        const credentials = InstanceUtils.readCredentialsFile(guildId);
         const server = instance.serverList[serverId];
         let hoster = Client.client.intlGet(guildId, 'unknown');
-        //if (credentials.hasOwnProperty(server.steamId)) {
-        //    hoster = await DiscordTools.getUserById(guildId, credentials[server.steamId].discordUserId);
-        if (authTokens.hasOwnProperty(server.steamId)) {
-            hoster = await DiscordTools.getUserById(guildId, authTokens[server.steamId].discordUserId);
+        if (credentials.hasOwnProperty(server.steamId)) {
+            hoster = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
             hoster = hoster.user.username;
         }
 
@@ -500,10 +497,15 @@ module.exports = {
         const instance = Client.client.getInstance(guildId);
         const server = instance.serverList[serverId];
         const entity = server.storageMonitors[entityId];
+<<<<<<< HEAD
         //const credentials = InstanceUtils.readCredentialsFile(guildId);
         const authTokens = InstanceUtils.readAuthTokensFile(guildId);
         //const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discordUserId);
         const user = await DiscordTools.getUserById(guildId, authTokens[server.steamId].discordUserId);
+=======
+        const credentials = InstanceUtils.readCredentialsFile(guildId);
+        const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+>>>>>>> a5b50ea2e45b3269630da8ae0bbb6cfb529bba6c
         const grid = entity.location !== null ? ` (${entity.location})` : '';
 
         return module.exports.getEmbed({
@@ -523,10 +525,15 @@ module.exports = {
         const instance = Client.client.getInstance(guildId);
         const server = instance.serverList[serverId];
         const entity = instance.serverList[serverId].switches[entityId];
+<<<<<<< HEAD
         //const credentials = InstanceUtils.readCredentialsFile(guildId);
         const authTokens = InstanceUtils.readAuthTokensFile(guildId);
         //const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discordUserId);
         const user = await DiscordTools.getUserById(guildId, authTokens[server.steamId].discordUserId);
+=======
+        const credentials = InstanceUtils.readCredentialsFile(guildId);
+        const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+>>>>>>> a5b50ea2e45b3269630da8ae0bbb6cfb529bba6c
         const grid = entity.location !== null ? ` (${entity.location})` : '';
 
         return module.exports.getEmbed({
@@ -546,10 +553,15 @@ module.exports = {
         const instance = Client.client.getInstance(guildId);
         const server = instance.serverList[serverId];
         const entity = server.alarms[entityId];
+<<<<<<< HEAD
         //const credentials = InstanceUtils.readCredentialsFile(guildId);
         const authTokens = InstanceUtils.readAuthTokensFile(guildId);
         //const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discordUserId);
         const user = await DiscordTools.getUserById(guildId, authTokens[server.steamId].discordUserId);
+=======
+        const credentials = InstanceUtils.readCredentialsFile(guildId);
+        const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+>>>>>>> a5b50ea2e45b3269630da8ae0bbb6cfb529bba6c
         const grid = entity.location !== null ? ` (${entity.location})` : '';
 
         return module.exports.getEmbed({
@@ -1000,7 +1012,7 @@ module.exports = {
         for (const credential in credentials) {
             if (credential === 'hoster') continue;
 
-            const user = await DiscordTools.getUserById(guildId, credentials[credential].discordUserId);
+            const user = await DiscordTools.getUserById(guildId, credentials[credential].discord_user_id);
             names += `${user.user.username}\n`;
             steamIds += `${credential}\n`;
             hoster += `${credential === credentials.hoster ? `${Constants.LEADER_EMOJI}\n` : '\u200B\n'}`;
@@ -1020,6 +1032,7 @@ module.exports = {
         });
     },
 
+<<<<<<< HEAD
     getAuthTokensShowEmbed: async function (guildId) {
         const authTokens = InstanceUtils.readAuthTokensFile(guildId);
         let names = '';
@@ -1049,6 +1062,8 @@ module.exports = {
         });
     },
 
+=======
+>>>>>>> a5b50ea2e45b3269630da8ae0bbb6cfb529bba6c
     getItemAvailableVendingMachineEmbed: function (guildId, serverId, str) {
         const instance = Client.client.getInstance(guildId);
         const server = instance.serverList[serverId];
