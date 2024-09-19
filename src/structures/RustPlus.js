@@ -2704,21 +2704,6 @@ class RustPlus extends RustPlusLib {
             });
         }
     }
-
-    getCommandDayNight() {
-        const time = Timer.convertDecimalToHoursMinutes(this.time.time);
-        const currentTime = Client.client.intlGet(this.guildId, 'inGameTime', { time: time });
-        const timeLeft = this.time.getTimeTillDayOrNight();
-
-        if (timeLeft === null) return currentTime;
-
-        const locString = this.time.isDay() ? 'timeTillNightfall' : 'timeTillDaylight';
-        const timeTilltransition = Client.client.intlGet(this.guildId, locString, { time: timeLeft });
-
-        return `${timeTilltransition}`;
-
-    }
-
 }
 
 module.exports = RustPlus;

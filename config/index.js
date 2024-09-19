@@ -26,9 +26,9 @@ module.exports = {
         reconnectIntervalMs: process.env.RPP_RECONNECT_INTERVAL || 15000,
     },
     discord: {
-        username: process.env.RPP_DISCORD_USERNAME || '',
+        username: process.env.RPP_DISCORD_USERNAME || 'Rust-Disc Bot',
         clientId: process.env.RPP_DISCORD_CLIENT_ID || '1220250556652720148',
-        token: process.env.RPP_DISCORD_TOKEN || 'MTIyMDI1MDU1NjY1MjcyMDE0OA.G4fsCJ.07aWFBcjWYTB5qWdsuTupZ4eXQgasWX2CIBXqQ',
+        token: process.env.RPP_DISCORD_TOKEN || 'MTIyMDI1MDU1NjY1MjcyMDE0OA.GmRYvu.w-_2tyI0JhWx0lArvMWsDOjIBjRrEANsPb4NKc',
         needAdminPrivileges: process.env.RPP_NEED_ADMIN_PRIVILEGES || true, /* If true, only admins can delete (server, switch..), manage credentials and reset a channel */
     }
 };

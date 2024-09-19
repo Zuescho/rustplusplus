@@ -207,14 +207,6 @@ module.exports = {
             commandLowerCase === `${prefix}${client.intlGet(guildId, 'commandSyntaxWipe')}`) {
             rustplus.sendInGameMessage(rustplus.getCommandWipe());
         }
-        else if (commandLowerCase === `${prefix}${client.intlGet('en', 'commandSyntaxDay')}` ||
-            commandLowerCase === `${prefix}${client.intlGet(guildId, 'commandSyntaxDay')}`) {
-            rustplus.sendInGameMessage(rustplus.getCommandDayNight());
-        }
-        else if (commandLowerCase === `${prefix}${client.intlGet('en', 'commandSyntaxNight')}` ||
-            commandLowerCase === `${prefix}${client.intlGet(guildId, 'commandSyntaxNight')}`) {
-            rustplus.sendInGameMessage(rustplus.getCommandDayNight());
-        }
         else {
             /* Maybe a custom command? */
 

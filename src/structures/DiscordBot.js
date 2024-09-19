@@ -44,12 +44,6 @@ class DiscordBot extends Discord.Client {
         this.commands = new Discord.Collection();
         this.fcmListeners = new Object();
         this.fcmListenersLite = new Object();
-<<<<<<< HEAD
-        this.authTokenListenerIntervalIds = new Object();
-        this.authTokenListenerSessionIds = new Object();
-        this.authTokenReadNotifications = new Object();
-=======
->>>>>>> a5b50ea2e45b3269630da8ae0bbb6cfb529bba6c
         this.instances = {};
         this.guildIntl = {};
         this.botIntl = null;
@@ -232,15 +226,6 @@ class DiscordBot extends Discord.Client {
             await PermissionHandler.resetPermissionsAllChannels(this, guild);
         }
 
-<<<<<<< HEAD
-        //require('../util/FcmListener')(this, guild);
-        //const credentials = InstanceUtils.readCredentialsFile(guild.id);
-        //for (const steamId of Object.keys(credentials)) {
-        //    if (steamId !== credentials.hoster && steamId !== 'hoster') {
-        //        require('../util/FcmListenerLite')(this, guild, steamId);
-        //    }
-        //}
-=======
         require('../util/FcmListener')(this, guild);
         const credentials = InstanceUtils.readCredentialsFile(guild.id);
         for (const steamId of Object.keys(credentials)) {
@@ -248,7 +233,6 @@ class DiscordBot extends Discord.Client {
                 require('../util/FcmListenerLite')(this, guild, steamId);
             }
         }
->>>>>>> a5b50ea2e45b3269630da8ae0bbb6cfb529bba6c
 
         await require('../discordTools/SetupSettingsMenu')(this, guild);
 
