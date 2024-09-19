@@ -28,7 +28,7 @@ module.exports = {
     discord: {
         username: process.env.RPP_DISCORD_USERNAME || 'Rust-Disc Bot',
         clientId: process.env.RPP_DISCORD_CLIENT_ID || '1220250556652720148',
-        token: process.env.RPP_DISCORD_TOKEN || 'MTIyMDI1MDU1NjY1MjcyMDE0OA.GmRYvu.w-_2tyI0JhWx0lArvMWsDOjIBjRrEANsPb4NKc',
+        token: process.env.RPP_DISCORD_TOKEN || '',
         needAdminPrivileges: process.env.RPP_NEED_ADMIN_PRIVILEGES || true, /* If true, only admins can delete (server, switch..), manage credentials and reset a channel */
     }
 };
