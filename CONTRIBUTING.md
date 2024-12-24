@@ -5,7 +5,7 @@ discord, or any other method with the owners of this repository before making a 
 your help with any of the following:
 
 * Reporting a bug
-* Discussing the current state of the code
+* Discussing the current state of the code.
 * Submitting a fix
 * Proposing new features
 
