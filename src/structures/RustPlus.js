@@ -38,6 +38,7 @@ const Map = require('../util/map.js');
 const RustPlusLite = require('../structures/RustPlusLite');
 const TeamHandler = require('../handlers/teamHandler.js');
 const Timer = require('../util/timer.js');
+const Ai = require('./Ai.js');
 
 const TOKENS_LIMIT = 24;        /* Per player */
 const TOKENS_REPLENISH = 3;     /* Per second */
@@ -108,6 +109,9 @@ class RustPlus extends RustPlusLib {
         this.time = null;           /* Stores the Time structure. */
         this.team = null;           /* Stores the Team structure. */
         this.mapMarkers = null;     /* Stores the MapMarkers structure. */
+
+        /* Groq AI chat assistant */
+        this.ai = new Ai(guildId);
 
         this.loadRustPlusEvents();
     }
@@ -342,14 +346,24 @@ class RustPlus extends RustPlusLib {
                 return { error: Client.client.intlGet(null, 'tokensDidNotReplenish') };
             }
 
-            return await this.sendRequestAsync({
+            var requestBody = {
                 entityId: id,
                 setEntityValue: {
                     value: value
                 }
-            }, timeout).catch((e) => {
-                return e;
-            });
+            };
+
+            this.sendRequest(requestBody);
+
+            var response = await this.getEntityInfoAsync(id, timeout);
+            var payload = response?.entityInfo?.payload;
+            var payloadValue = payload?.value;
+
+            if (value === payloadValue || (payloadValue === undefined && value === false)) {
+                return { success: true };
+            }
+
+            return { error: Client.client.intlGet(null, 'errorCap') };
         }
         catch (e) {
             return e;
@@ -670,6 +684,27 @@ class RustPlus extends RustPlusLib {
         }
 
         return string !== '' ? `${string.slice(0, -2)}.` : Client.client.intlGet(this.guildId, 'noOneIsAfk');
+    }
+
+    async getCommandAi(command) {
+        const instance = Client.client.getInstance(this.guildId);
+        const prefix = this.generalSettings.prefix;
+        const commandAi = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxAi')}`;
+        const commandAiEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxAi')}`;
+        let query = null;
+
+        if (command.toLowerCase().startsWith(`${commandAi} `)) {
+            query = command.slice(`${commandAi} `.length).trim();
+        }
+        else if (command.toLowerCase().startsWith(`${commandAiEn} `)) {
+            query = command.slice(`${commandAiEn} `.length).trim();
+        }
+
+        if (query === null) return null;
+
+        let response = await this.askAiBot(query);
+
+        return response;
     }
 
     getCommandAlive(command) {
@@ -1727,7 +1762,14 @@ class RustPlus extends RustPlusLib {
                 }
 
                 const locations = [];
+                let foundLines = '';
+                let full = false;
+
+                const unknownString = Client.client.intlGet(this.guildId, 'unknown');
+                const leftString = Client.client.intlGet(this.guildId, 'remain');
+
                 for (const vendingMachine of this.mapMarkers.vendingMachines) {
+                    if (full) break;
                     if (!vendingMachine.hasOwnProperty('sellOrders')) continue;
 
                     for (const order of vendingMachine.sellOrders) {
@@ -1740,12 +1782,39 @@ class RustPlus extends RustPlusLib {
                             (Object.keys(Client.client.items.items).includes(order.currencyId.toString())) ?
                                 order.currencyId : null;
 
+                        const orderQuantity = order.quantity;
+                        const orderCostPerItem = order.costPerItem;
+                        const orderAmountInStock = order.amountInStock;
+                        const orderItemIsBlueprint = order.itemIsBlueprint;
+                        const orderCurrencyIsBlueprint = order.currencyIsBlueprint;
+
+                        const orderItemName = (orderItemId !== null) ?
+                            Client.client.items.getName(orderItemId) : unknownString;
+                        const orderCurrencyName = (orderCurrencyId !== null) ?
+                            Client.client.items.getName(orderCurrencyId) : unknownString;
+
                         if ((orderType === 'all' &&
                             (orderItemId === parseInt(itemId) || orderCurrencyId === parseInt(itemId))) ||
                             (orderType === 'buy' && orderCurrencyId === parseInt(itemId)) ||
                             (orderType === 'sell' && orderItemId === parseInt(itemId))) {
                             if (locations.includes(vendingMachine.location.location)) continue;
-                            locations.push(vendingMachine.location.location);
+                            
+                            const prevFoundLines = foundLines;
+                            
+                            foundLines += `[${vendingMachine.location.location}] `;
+                            foundLines += `${orderQuantity}x ${orderItemName}`;
+                            foundLines += `${(orderItemIsBlueprint) ? ' (BP)' : ''} for `;
+                            foundLines += `${orderCostPerItem}x ${orderCurrencyName}`;
+                            foundLines += `${(orderCurrencyIsBlueprint) ? ' (BP)' : ''} `;
+                            foundLines += `(${orderAmountInStock} ${leftString})`;
+
+                            if (foundLines.length >= 4000) {
+                                foundLines = prevFoundLines;
+                                foundLines += `...`;
+                                full = true;
+                                break;
+                            }
+                            locations.push(foundLines);
                         }
                     }
                 }
@@ -1754,7 +1823,7 @@ class RustPlus extends RustPlusLib {
                     return Client.client.intlGet(this.guildId, 'noItemFound');
                 }
 
-                return locations.join(', ');
+                return locations.join('\n');
             } break;
 
             case commandSubEn:
@@ -2745,6 +2814,15 @@ class RustPlus extends RustPlusLib {
         }
 
         return strings;
+    }
+
+    async askAiBot(query) {
+        if (this.ai !== null) {
+            let response = await this.ai.askAiBot(query);
+
+            return response;
+        }
+        return { error: 'Failed to ask Rust bot.' }
     }
 }
 
