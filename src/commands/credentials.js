@@ -124,12 +124,19 @@ async function addCredentials(client, interaction, verifyId) {
             return;
         }
     }
-
-    if (steamId in credentials) {
-        const str = client.intlGet(guildId, 'credentialsAlreadyRegistered', { steamId: steamId });
-        await client.interactionEditReply(interaction, DiscordEmbeds.getActionInfoEmbed(1, str));
-        client.log(client.intlGet(null, 'warningCap'), str);
-        return;
+// Clean up existing listeners if there are any.
+    if (steamId === credentials.hoster) {
+            if (client.fcmListeners[guildId]) {
+                client.fcmListeners[guildId].destroy();
+            }
+            delete client.fcmListeners[guildId];
+            credentials.hoster = null;
+        } else {
+            if (client.fcmListenersLite[guildId][steamId]) {
+                client.fcmListenersLite[guildId][steamId].destroy();
+            }
+            delete client.fcmListenersLite[guildId][steamId];
+        }
     }
 
     credentials[steamId] = new Object();
