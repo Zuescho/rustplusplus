@@ -124,8 +124,10 @@ async function addCredentials(client, interaction, verifyId) {
             return;
         }
     }
-// Clean up existing listeners if there are any.
-    if (steamId === credentials.hoster) {
+
+    // Clean up existing listeners if there are any.
+    if (steamId in credentials) {
+        if (steamId === credentials.hoster) {
             if (client.fcmListeners[guildId]) {
                 client.fcmListeners[guildId].destroy();
             }
@@ -138,7 +140,7 @@ async function addCredentials(client, interaction, verifyId) {
             delete client.fcmListenersLite[guildId][steamId];
         }
     }
-
+    
     credentials[steamId] = new Object();
     credentials[steamId].gcm = new Object();
     credentials[steamId].gcm.android_id = interaction.options.getString('gcm_android_id');
