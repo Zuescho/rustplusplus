@@ -107,7 +107,10 @@ module.exports = {
         }
         else if (commandLowerCase.startsWith(`${prefix}${client.intlGet('en', 'commandSyntaxMarket')} `) ||
             commandLowerCase.startsWith(`${prefix}${client.intlGet(guildId, 'commandSyntaxMarket')} `)) {
-            rustplus.sendInGameMessage(rustplus.getCommandMarket(command));
+                let response = rustplus.getCommandMarket(command);
+                if (typeof response === 'string' && response.length > 0) {
+                    rustplus.sendInGameMessage(response);
+                }
         }
         else if (commandLowerCase === `${prefix}${client.intlGet('en', 'commandSyntaxMute')}` ||
             commandLowerCase === `${prefix}${client.intlGet(guildId, 'commandSyntaxMute')}`) {
