@@ -76,6 +76,34 @@ or
 
 Make sure you use the correct values for DISCORD_CLIENT_ID as well as DISCORD_TOKEN in the docker command/docker-compose.yml
 
+## **Changes in this fork**
+
+This fork is based on [alexemanuelol/rustplusplus](https://github.com/alexemanuelol/rustplusplus) with additional changes merged from [FaiThiX/rustplusplus](https://github.com/FaiThiX/rustplusplus).
+
+### From upstream (alexemanuelol)
+* Fix Vending Machines not updating
+* Context menu choices bugfix
+* Updated items.json and cctv.json
+* Fixed raidalarm notification giving invalid thumbnail URL
+* Fixed thumbnails only allowing URLs
+* Added issue template
+* Updated discordjs packages
+
+### From FaiThiX
+* Deep Sea detection, commands, and history tracking
+* In-game and Discord commands for Deep Sea events
+* Market rework
+* Atomic write pattern for instance files (prevents corruption during crashes)
+* Docker-compose refactoring
+* Discord Voice fix
+* Map location fixes
+* Various version bumps and bug fixes
+
+### Custom changes
+* Day/night transition broadcast warning (5-minute advance notification)
+* Credential re-registration rework (cleans up existing listeners instead of rejecting)
+* CI modernization (Node 22, simplified lint workflow)
+
 ## **Thanks to**
 
 **liamcottle**@GitHub - for the [rustplus.js](https://github.com/liamcottle/rustplus.js) library.
@@ -83,3 +111,5 @@ Make sure you use the correct values for DISCORD_CLIENT_ID as well as DISCORD_TO
 **.Vegas.#4844**@Discord - for the awesome icons!
 <br>
 **alexemanuelol**@GitHub - for the Main Development of the [Rust++ Bot](https://github.com/alexemanuelol/rustPlusPlus).
+<br>
+**FaiThiX**@GitHub - for the [Deep Sea features, market rework, and various fixes](https://github.com/FaiThiX/rustplusplus).
