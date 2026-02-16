@@ -397,22 +397,39 @@ module.exports = {
         if (switchId === '') switchId = Client.client.intlGet(guildId, 'none');
         if (switchActive === '') switchActive = Client.client.intlGet(guildId, 'none');
 
+        const fields = [
+            {
+                name: Client.client.intlGet(guildId, 'customCommand'),
+                value: `\`${instance.generalSettings.prefix}${group.command}\``,
+                inline: false
+            }
+        ];
+
+        if (group.alarmId) {
+            const alarm = instance.serverList[serverId].alarms[group.alarmId];
+            const alarmName = alarm ? alarm.name : `ID: ${group.alarmId}`;
+            const current = group.alarmCurrentCount || 0;
+            const required = group.alarmTriggerCount || 5;
+            fields.push({
+                name: 'Linked Alarm',
+                value: `${alarmName} (${current}/${required})`,
+                inline: false
+            });
+        }
+
+        fields.push(
+            { name: Client.client.intlGet(guildId, 'switches'), value: switchName, inline: true },
+            { name: 'ID', value: switchId, inline: true },
+            { name: Client.client.intlGet(guildId, 'status'), value: switchActive, inline: true }
+        );
+
         return module.exports.getEmbed({
             title: group.name,
             color: Constants.COLOR_DEFAULT,
             description: `**ID**: \`${groupId}\``,
             thumbnail: `attachment://${group.image}`,
             footer: { text: `${instance.serverList[serverId].title}` },
-            fields: [
-                {
-                    name: Client.client.intlGet(guildId, 'customCommand'),
-                    value: `\`${instance.generalSettings.prefix}${group.command}\``,
-                    inline: false
-                },
-                { name: Client.client.intlGet(guildId, 'switches'), value: switchName, inline: true },
-                { name: 'ID', value: switchId, inline: true },
-                { name: Client.client.intlGet(guildId, 'status'), value: switchActive, inline: true }
-            ],
+            fields: fields,
 
             timestamp: true
         });

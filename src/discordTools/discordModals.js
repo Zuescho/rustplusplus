@@ -212,6 +212,35 @@ module.exports = {
         return modal;
     },
 
+    getGroupLinkAlarmModal(guildId, serverId, groupId) {
+        const instance = Client.client.getInstance(guildId);
+        const group = instance.serverList[serverId].switchGroups[groupId];
+        const identifier = JSON.stringify({ "serverId": serverId, "groupId": groupId });
+
+        const modal = module.exports.getModal({
+            customId: `GroupLinkAlarm${identifier}`,
+            title: `Link Alarm - ${group.name.length > 20 ? `${group.name.slice(0, 20)}..` : group.name}`
+        });
+
+        modal.addComponents(
+            new Discord.ActionRowBuilder().addComponents(TextInput.getTextInput({
+                customId: 'GroupLinkAlarmId',
+                label: 'Alarm Entity ID (empty to unlink)',
+                value: group.alarmId || '',
+                style: Discord.TextInputStyle.Short,
+                required: false
+            })),
+            new Discord.ActionRowBuilder().addComponents(TextInput.getTextInput({
+                customId: 'GroupLinkAlarmTriggerCount',
+                label: 'Trigger count before activation',
+                value: `${group.alarmTriggerCount || 5}`,
+                style: Discord.TextInputStyle.Short
+            }))
+        );
+
+        return modal;
+    },
+
     getSmartAlarmEditModal(guildId, serverId, entityId) {
         const instance = Client.client.getInstance(guildId);
         const entity = instance.serverList[serverId].alarms[entityId];

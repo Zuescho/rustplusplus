@@ -220,6 +220,48 @@ module.exports = async (client, interaction) => {
 
         await DiscordMessages.sendSmartSwitchGroupMessage(interaction.guildId, ids.serverId, ids.groupId);
     }
+    else if (interaction.customId.startsWith('GroupLinkAlarm')) {
+        const ids = JSON.parse(interaction.customId.replace('GroupLinkAlarm', ''));
+        const server = instance.serverList[ids.serverId];
+        const alarmId = interaction.fields.getTextInputValue('GroupLinkAlarmId').trim();
+        const triggerCountStr = interaction.fields.getTextInputValue('GroupLinkAlarmTriggerCount').trim();
+
+        if (!server || (server && !server.switchGroups.hasOwnProperty(ids.groupId))) {
+            interaction.deferUpdate();
+            return;
+        }
+
+        if (alarmId === '') {
+            server.switchGroups[ids.groupId].alarmId = null;
+            server.switchGroups[ids.groupId].alarmTriggerCount = 5;
+            server.switchGroups[ids.groupId].alarmCurrentCount = 0;
+        }
+        else {
+            if (!server.alarms || !server.alarms.hasOwnProperty(alarmId)) {
+                interaction.deferUpdate();
+                return;
+            }
+
+            const triggerCount = parseInt(triggerCountStr);
+            if (isNaN(triggerCount) || triggerCount < 1) {
+                interaction.deferUpdate();
+                return;
+            }
+
+            server.switchGroups[ids.groupId].alarmId = alarmId;
+            server.switchGroups[ids.groupId].alarmTriggerCount = triggerCount;
+            server.switchGroups[ids.groupId].alarmCurrentCount = 0;
+        }
+
+        client.setInstance(interaction.guildId, instance);
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'modalValueChange', {
+            id: `${verifyId}`,
+            value: `alarmId: ${alarmId || 'none'}`
+        }));
+
+        await DiscordMessages.sendSmartSwitchGroupMessage(interaction.guildId, ids.serverId, ids.groupId);
+    }
     else if (interaction.customId.startsWith('SmartAlarmEdit')) {
         const ids = JSON.parse(interaction.customId.replace('SmartAlarmEdit', ''));
         const server = instance.serverList[ids.serverId];

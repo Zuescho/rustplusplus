@@ -54,6 +54,11 @@ module.exports = {
     TurnOnOffGroup: async function (client, rustplus, guildId, serverId, groupId, value) {
         const instance = client.getInstance(guildId);
 
+        if (!value && instance.serverList[serverId].switchGroups[groupId].alarmId) {
+            instance.serverList[serverId].switchGroups[groupId].alarmCurrentCount = 0;
+            client.setInstance(guildId, instance);
+        }
+
         const switches = instance.serverList[serverId].switchGroups[groupId].switches;
 
         const actionSwitches = [];

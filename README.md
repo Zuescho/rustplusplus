@@ -1,47 +1,19 @@
-<p align="center">
-<img src="./rustplusplus.png" width="500"></a>
-</p>
-
-<p align="center">
-<a href="https://discord.gg/vcrKbKVAbc"><img src="https://img.shields.io/badge/Discord-Rust++-%237289DA?style=flat&logo=discord" alt="discord"/></a>
-<a href="https://ko-fi.com/alexemanuelol"><img src="https://img.shields.io/badge/Donate%20a%20Coffee-alexemanuelol-yellow?style=flat&logo=buy-me-a-coffee" alt="donate on ko-fi"/></a>
-
-<p align="center">
-<a href="https://crowdin.com/project/rustplusplus"><img src="https://badges.crowdin.net/rustplusplus/localized.svg" alt="Crowdin"/></a>
-</p>
-
-<p align="center">
-    <a href="https://discord.gg/vcrKbKVAbc">
-        <img src="./join_discord.png" width="250">
-    </a>
-</p>
-
 <h1 align="center"><em><b>rustplusplus</b> ~ Rust+ Discord Bot</em></h1>
-</p>
 
 A NodeJS Discord Bot that uses the [rustplus.js](https://github.com/liamcottle/rustplus.js) library to utilize the power of the [Rust+ Companion App](https://rust.facepunch.com/companion) with additional Quality-of-Life features.
 
 
-## **How-to Setup Video**
-
-[![Image of setup video](https://www.youtube.com/s/desktop/4a88d8c6/img/favicon_144x144.png)](https://youtu.be/GX03brJiMZg)
-
 ## **Features**
 
-* Receive notifications for [In-Game Events](docs/discord_text_channels.md#events-channel) (Patrol Helicopter, Cargo Ship, Chinook 47, Oil Rigs triggered).
-* Control [Smart Switches](docs/smart_devices.md#smart-switches) or Groups of Smart Switches via Discord or In-Game Team Chat.
-* Setup [Smart Alarms](docs/smart_devices.md#smart-alarms) to notify in Discord or In-Game Team Chat whenever they are triggered.
-* Use [Storage Monitors](docs/smart_devices.md#storage-monitors) to keep track of Tool Cupboard Upkeep or Large Wooden Box/Vending Machine content.
-* Head over to the [Information Text Channel](docs/images/information_channel.png) to see all sorts of information about the server, ongoing events and team member status.
-* Communicate with teammates from [Discord to In-Game](docs/discord_text_channels.md#teamchat-channel) and vice versa.
-* Keep track of other teams on the server with the [Battlemetrics Player Tracker](docs/discord_text_channels.md#trackers-channel).
-* Alot of [QoL Commands](docs/commands.md) that can be used In-Game or from Discord.
-* View the [Full list of features](docs/full_list_features.md).
+* Receive notifications for In-Game Events (Patrol Helicopter, Cargo Ship, Chinook 47, Oil Rigs triggered).
+* Control Smart Switches or Groups of Smart Switches via Discord or In-Game Team Chat.
+* Setup Smart Alarms to notify in Discord or In-Game Team Chat whenever they are triggered.
+* Link Smart Alarms to Switch Groups — automatically turn on a group after a configurable number of alarm triggers.
+* Use Storage Monitors to keep track of Tool Cupboard Upkeep or Large Wooden Box/Vending Machine content.
+* Communicate with teammates from Discord to In-Game and vice versa.
+* Keep track of other teams on the server with the Battlemetrics Player Tracker.
+* Lots of QoL Commands that can be used In-Game or from Discord.
 
-
-## **Documentation**
-
-> Documentation can be found [here](https://github.com/faithix/rustplusplus/blob/master/docs/documentation.md). The documentation explains the features as well as `how to setup the bot`, so make sure to take a look at it 😉
 
 ## **Credentials**
 
@@ -100,6 +72,7 @@ This fork is based on [alexemanuelol/rustplusplus](https://github.com/alexemanue
 * Various version bumps and bug fixes
 
 ### Custom changes
+* Alarm-triggered switch groups (link an alarm to a switch group, auto-activate after N triggers)
 * Day/night transition broadcast warning (5-minute advance notification)
 * Credential re-registration rework (cleans up existing listeners instead of rejecting)
 * CI modernization (Node 22, simplified lint workflow)
@@ -113,3 +86,9 @@ This fork is based on [alexemanuelol/rustplusplus](https://github.com/alexemanue
 **alexemanuelol**@GitHub - for the Main Development of the [Rust++ Bot](https://github.com/alexemanuelol/rustPlusPlus).
 <br>
 **FaiThiX**@GitHub - for the [Deep Sea features, market rework, and various fixes](https://github.com/FaiThiX/rustplusplus).
+
+---
+
+<p align="center">
+<a href="https://ko-fi.com/alexemanuelol"><img src="https://img.shields.io/badge/Donate%20a%20Coffee-alexemanuelol-yellow?style=flat&logo=buy-me-a-coffee" alt="donate on ko-fi"/></a>
+</p>

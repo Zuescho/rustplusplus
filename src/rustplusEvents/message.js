@@ -189,6 +189,20 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
         if (instance.generalSettings.smartAlarmNotifyInGame) {
             rustplus.sendInGameMessage(`${server.alarms[entityId].name}: ${server.alarms[entityId].message}`);
         }
+
+        for (const [groupId, group] of Object.entries(server.switchGroups)) {
+            if (group.alarmId === entityId.toString()) {
+                group.alarmCurrentCount = (group.alarmCurrentCount || 0) + 1;
+                client.setInstance(rustplus.guildId, instance);
+
+                if (group.alarmCurrentCount >= group.alarmTriggerCount) {
+                    await SmartSwitchGroupHandler.TurnOnOffGroup(
+                        client, rustplus, rustplus.guildId, serverId, groupId, true
+                    );
+                }
+                await DiscordMessages.sendSmartSwitchGroupMessage(rustplus.guildId, serverId, groupId);
+            }
+        }
     }
 
     DiscordMessages.sendSmartAlarmMessage(rustplus.guildId, rustplus.serverId, entityId);

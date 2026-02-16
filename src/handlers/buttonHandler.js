@@ -574,7 +574,10 @@ module.exports = async (client, interaction) => {
             command: `${groupId}`,
             switches: [],
             image: 'smart_switch.png',
-            messageId: null
+            messageId: null,
+            alarmId: null,
+            alarmTriggerCount: 5,
+            alarmCurrentCount: 0
         }
         client.setInstance(guildId, instance);
 
@@ -1043,6 +1046,18 @@ module.exports = async (client, interaction) => {
         }
 
         const modal = DiscordModals.getGroupRemoveSwitchModal(guildId, ids.serverId, ids.groupId);
+        await interaction.showModal(modal);
+    }
+    else if (interaction.customId.startsWith('GroupLinkAlarm')) {
+        const ids = JSON.parse(interaction.customId.replace('GroupLinkAlarm', ''));
+        const server = instance.serverList[ids.serverId];
+
+        if (!server || (server && !server.switchGroups.hasOwnProperty(ids.groupId))) {
+            await interaction.message.delete();
+            return;
+        }
+
+        const modal = DiscordModals.getGroupLinkAlarmModal(guildId, ids.serverId, ids.groupId);
         await interaction.showModal(modal);
     }
     else if (interaction.customId.startsWith('TrackerEveryone')) {

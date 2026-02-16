@@ -203,6 +203,13 @@ module.exports = (client, guild) => {
 
     /* Check every serverList for missing keys */
     for (const [serverId, content] of Object.entries(instance.serverList)) {
+        if (content.hasOwnProperty('switchGroups')) {
+            for (const group of Object.values(content.switchGroups)) {
+                if (!group.hasOwnProperty('alarmId')) group.alarmId = null;
+                if (!group.hasOwnProperty('alarmTriggerCount')) group.alarmTriggerCount = 5;
+                if (!group.hasOwnProperty('alarmCurrentCount')) group.alarmCurrentCount = 0;
+            }
+        }
         if (!content.hasOwnProperty('customCameraGroups')) content.customCameraGroups = {};
         if (!content.hasOwnProperty('cargoShipEgressTimeMs')) {
             content.cargoShipEgressTimeMs = Constants.DEFAULT_CARGO_SHIP_EGRESS_TIME_MS;
