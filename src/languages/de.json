@@ -382,6 +382,8 @@
     "fishingVillage": "Fischerdorf",
     "five": "Fünf",
     "four": "Vier",
+    "gettingDark": "Es wird dunkel!",
+    "gettingLight": "Es wird hell!",
     "giantExcavatorPit": "Riesige Baggergrube",
     "greaterThanSign": "Größer-als-Zeichen",
     "groupAddSwitchDesc": "Füge Schalter zu {group} hinzu",

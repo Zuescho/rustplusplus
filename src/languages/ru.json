@@ -382,6 +382,8 @@
     "fishingVillage": "Рыбацкая деревня",
     "five": "Пять",
     "four": "Четыре",
+    "gettingDark": "It's getting dark!",
+    "gettingLight": "It's getting light!",
     "giantExcavatorPit": "Гигантский экскаватор",
     "greaterThanSign": "Знак больше",
     "groupAddSwitchDesc": "Добавить переключатель в {group}",

@@ -397,6 +397,8 @@
     "foundItemInVendingMachine" : "{quantity}{item} for {priceAmount}{price} | {stock}x Instock @ {location}",
     "foundOrdersSummary": "Found {foundOrders} Vending Machine orders. Showing Page {currentPage} of {totalPages}. Use {nextCommand} to see the next page.",
     "foundOrdersSummaryNoNext": "Found {foundOrders} Vending Machine orders.",
+    "gettingDark": "It's getting dark!",
+    "gettingLight": "It's getting light!",
     "giantExcavatorPit": "Giant Excavator Pit",
     "greaterThanSign": "Greater-than Sign",
     "groupAddSwitchDesc": "Add Switch to {group}",
