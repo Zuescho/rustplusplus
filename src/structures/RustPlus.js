@@ -2662,7 +2662,30 @@ class RustPlus extends RustPlusLib {
             } break;
 
             default: {
-                return null;
+                /* Shorthand: !timer <time> [message] — no 'add' subcommand needed */
+                const timeSeconds = Timer.getSecondsFromStringTime(subcommand);
+                if (timeSeconds === null) return null;
+
+                const message = rest !== '' ? rest : subcommand;
+
+                let id = 0;
+                while (Object.keys(this.timers).map(Number).includes(id)) {
+                    id += 1;
+                }
+
+                this.timers[id] = {
+                    timer: new Timer.timer(
+                        () => {
+                            this.sendInGameMessage(Client.client.intlGet(this.guildId, 'timer',
+                                { message: message }), 'TIMER');
+                            delete this.timers[id];
+                        },
+                        timeSeconds * 1000),
+                    message: message
+                };
+                this.timers[id].timer.start();
+
+                return Client.client.intlGet(this.guildId, 'timerSet', { time: subcommand });
             } break;
         }
     }
