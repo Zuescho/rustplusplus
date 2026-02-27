@@ -29,6 +29,8 @@ For setup instructions, credentials, and general documentation see the [original
 * Alarm-triggered switch groups (link an alarm to a switch group, auto-activate after N triggers)
 * Day/night transition in-game broadcast messages ("It's getting dark!" / "It's getting light!")
 * Smart switch auto-control refactor (day/night, proximity, and online-player based switching)
+* Battlemetrics upcoming wipes display in server embed (Next Map Wipe / Next Full Wipe with relative timestamps, toggleable)
+* Shorthand timer syntax: `!timer <time> [message]` without needing `add` subcommand
 * Credential re-registration rework (cleans up existing listeners instead of rejecting)
 * CI modernization (Node 22, simplified lint workflow)
 
