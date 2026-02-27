@@ -105,6 +105,7 @@ class Battlemetrics {
         this.server_rust_last_seed_change = null;
         this.server_rust_last_wipe = null;
         this.server_rust_last_wipe_ent = null;
+        this.server_rust_wipes = null;
         this.server_serverSteamId = null;
         this.map_url = null;
         this.map_thumbnailUrl = null;
@@ -153,6 +154,7 @@ class Battlemetrics {
     set offlinePlayers(offlinePlayers) { this._offlinePlayers = offlinePlayers; }
     get serverEvaluation() { return this._serverEvaluation; }
     set serverEvaluation(serverEvaluation) { this._serverEvaluation = serverEvaluation; }
+    get rustWipes() { return this.server_rust_wipes; }
 
     /**
      *  Construct the Battlemetrics API call for searching servers by name.
@@ -471,6 +473,23 @@ class Battlemetrics {
     }
 
     /**
+     *  Get upcoming wipes ordered by time (ascending).
+     *  @return {Array} Array of wipe objects sorted by timestamp.
+     */
+    getUpcomingWipesOrderedByTime() {
+        const unordered = [];
+        for (const wipe of this.rustWipes) {
+            const timestampDate = new Date(wipe.timestamp);
+            wipe.discordTimestamp = timestampDate.getTime() / 1000;
+            const timestampSplit = timestampDate.toISOString().split('T');
+            wipe.readableTimestamp = timestampSplit.length === 2 ?
+                `${timestampSplit[0]} T ${timestampSplit[1]}` : timestampDate.toISOString();
+            unordered.push(wipe);
+        }
+        return unordered.sort(function (a, b) { return a.discordTimestamp - b.discordTimestamp; });
+    }
+
+    /**
      *  Evaluate the server data to check for changes.
      *  @param {bool} firstTime True if it is the first time evaluating, else false.
      *  @return {bool|null} null if id is not set, false if something went wrong, true if successful.
@@ -555,6 +574,11 @@ class Battlemetrics {
             details.rust_last_wipe_ent, firstTime);
         this.#evaluateServerParameter('server_serverSteamId', this.server_serverSteamId,
             details.serverSteamId, firstTime);
+
+        const rustWipes = details.rust_wipes;
+        if (rustWipes) {
+            this.#evaluateServerParameter('server_rust_wipes', this.server_rust_wipes, rustWipes, firstTime);
+        }
 
         const rustMaps = details.rust_maps;
         if (rustMaps) {

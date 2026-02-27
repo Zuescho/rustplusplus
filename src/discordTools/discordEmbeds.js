@@ -94,22 +94,59 @@ module.exports = {
         }
         description += `\n${server.description}`;
 
+        const instance = Client.client.getInstance(guildId);
+        const fields = [{
+            name: Client.client.intlGet(guildId, 'connect'),
+            value: `\`${server.connect === null ?
+                Client.client.intlGet(guildId, 'unavailable') : server.connect}\``,
+            inline: true
+        },
+        {
+            name: Client.client.intlGet(guildId, 'hoster'),
+            value: `\`${hoster} (${server.steamId})\``,
+            inline: false
+        }];
+
+        if (server.battlemetricsId !== null &&
+            instance.generalSettings.displayInformationBattlemetricsUpcomingWipes) {
+            const bmInstance = Client.client.battlemetricsInstances[server.battlemetricsId];
+            if (bmInstance && bmInstance.rustWipes) {
+                const upcomingWipes = bmInstance.getUpcomingWipesOrderedByTime();
+                const mapWipe = upcomingWipes.find(e => e.type === 'map');
+                const fullWipe = upcomingWipes.find(e => e.type === 'full');
+
+                if (mapWipe || fullWipe) {
+                    if (mapWipe) {
+                        fields.push({
+                            name: Client.client.intlGet(guildId, 'nextMapWipe'),
+                            value: `<t:${Math.floor(mapWipe.discordTimestamp)}:R>`,
+                            inline: true
+                        });
+                    }
+                    if (fullWipe) {
+                        fields.push({
+                            name: Client.client.intlGet(guildId, 'nextFullWipe'),
+                            value: `<t:${Math.floor(fullWipe.discordTimestamp)}:R>`,
+                            inline: true
+                        });
+                    }
+                }
+                else if (upcomingWipes.length > 0) {
+                    fields.push({
+                        name: Client.client.intlGet(guildId, 'nextWipe'),
+                        value: `<t:${Math.floor(upcomingWipes[0].discordTimestamp)}:R>`,
+                        inline: true
+                    });
+                }
+            }
+        }
+
         return module.exports.getEmbed({
             title: `${server.title}`,
             color: Constants.COLOR_DEFAULT,
             description: description,
             thumbnail: `${server.img}`,
-            fields: [{
-                name: Client.client.intlGet(guildId, 'connect'),
-                value: `\`${server.connect === null ?
-                    Client.client.intlGet(guildId, 'unavailable') : server.connect}\``,
-                inline: true
-            },
-            {
-                name: Client.client.intlGet(guildId, 'hoster'),
-                value: `\`${hoster} (${server.steamId})\``,
-                inline: false
-            }]
+            fields: fields
         });
     },
 
