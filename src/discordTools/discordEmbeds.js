@@ -94,7 +94,6 @@ module.exports = {
         }
         description += `\n${server.description}`;
 
-        const instance = Client.client.getInstance(guildId);
         const fields = [{
             name: Client.client.intlGet(guildId, 'connect'),
             value: `\`${server.connect === null ?
