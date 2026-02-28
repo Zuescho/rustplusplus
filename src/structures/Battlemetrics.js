@@ -577,7 +577,7 @@ class Battlemetrics {
 
         const rustWipes = details.rust_wipes;
         if (rustWipes) {
-            this.#evaluateServerParameter('server_rust_wipes', this.server_rust_wipes, rustWipes, firstTime);
+            this.server_rust_wipes = rustWipes;
         }
 
         const rustMaps = details.rust_maps;

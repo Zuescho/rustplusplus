@@ -805,6 +805,40 @@ module.exports = {
             });
         }
 
+        const battlemetricsId = instance.serverList[rustplus.serverId].battlemetricsId;
+        if (battlemetricsId && instance.generalSettings.displayInformationBattlemetricsUpcomingWipes) {
+            const bmInstance = Client.client.battlemetricsInstances[battlemetricsId];
+            if (bmInstance && bmInstance.rustWipes) {
+                const upcomingWipes = bmInstance.getUpcomingWipesOrderedByTime();
+                const mapWipe = upcomingWipes.find(e => e.type === 'map');
+                const fullWipe = upcomingWipes.find(e => e.type === 'full');
+
+                if (mapWipe || fullWipe) {
+                    if (mapWipe) {
+                        embed.addFields({
+                            name: Client.client.intlGet(guildId, 'nextMapWipe'),
+                            value: `<t:${Math.floor(mapWipe.discordTimestamp)}:R>`,
+                            inline: true
+                        });
+                    }
+                    if (fullWipe) {
+                        embed.addFields({
+                            name: Client.client.intlGet(guildId, 'nextFullWipe'),
+                            value: `<t:${Math.floor(fullWipe.discordTimestamp)}:R>`,
+                            inline: true
+                        });
+                    }
+                }
+                else if (upcomingWipes.length > 0) {
+                    embed.addFields({
+                        name: Client.client.intlGet(guildId, 'nextWipe'),
+                        value: `<t:${Math.floor(upcomingWipes[0].discordTimestamp)}:R>`,
+                        inline: true
+                    });
+                }
+            }
+        }
+
         return embed;
     },
 
