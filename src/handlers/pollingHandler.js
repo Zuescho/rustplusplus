@@ -61,12 +61,14 @@ module.exports = {
         TimeHandler.handler(rustplus, client, time.time);
         await VendingMachines.handler(rustplus, client, mapMarkers.mapMarkers);
 
-        /* Broadcast day/night transition messages */
+        /* Broadcast day/night transition messages at fixed in-game hours */
         if (!rustplus.isFirstPoll) {
-            if (rustplus.time.isTurnedNight(time.time)) {
+            const prevTime = rustplus.time.time;
+            const newTime = time.time.time;
+            if (prevTime < 19.0 && newTime >= 19.0) {
                 rustplus.sendInGameMessage(client.intlGet(rustplus.guildId, 'gettingDark'));
             }
-            if (rustplus.time.isTurnedDay(time.time)) {
+            if (prevTime < 7.5 && newTime >= 7.5) {
                 rustplus.sendInGameMessage(client.intlGet(rustplus.guildId, 'gettingLight'));
             }
         }
