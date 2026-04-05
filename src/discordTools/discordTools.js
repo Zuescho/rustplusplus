@@ -257,14 +257,11 @@ module.exports = {
         const channel = module.exports.getTextChannelById(guildId, channelId);
 
         if (channel) {
+            /* Phase 1: Bulk delete messages newer than 14 days */
             for (let messagesLeft = numberOfMessages; messagesLeft > 0; messagesLeft -= 100) {
                 try {
-                    if (messagesLeft >= 100) {
-                        await channel.bulkDelete(100, true);
-                    }
-                    else {
-                        await channel.bulkDelete(messagesLeft, true);
-                    }
+                    const count = Math.min(messagesLeft, 100);
+                    await channel.bulkDelete(count, true);
                 }
                 catch (e) {
                     Client.client.log(Client.client.intlGet(null, 'errorCap'),
@@ -272,44 +269,40 @@ module.exports = {
                 }
             }
 
-            /* Fix for messages older than 14 days */
-            let messages = [];
-            try {
-                messages = await channel.messages.fetch({ limit: 100 });
-            }
-            catch (e) {
-                Client.client.log(Client.client.intlGet(null, 'errorCap'),
-                    Client.client.intlGet(null, 'couldNotPerformMessagesFetch', { channel: channelId }), 'error');
-            }
-
-            if (messages.size === 0) {
-                return;
-            }
-
+            /* Phase 2: Individually delete remaining messages (e.g. older than 14 days).
+               Loop until the channel is fully cleared to avoid leftover messages piling up. */
             let deleteCount = 0;
-            for (let message of messages) {
-                message = message[1];
-                if (!message.author.bot) {
-                    continue;
-                }
-
+            const MAX_PASSES = 10;
+            for (let pass = 0; pass < MAX_PASSES; pass++) {
+                let messages = [];
                 try {
-                    await message.delete();
-                    deleteCount++;
-                    /* Respect Discord rate limit: 5 deletes per ~5 seconds */
-                    if (deleteCount % 4 === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                    }
+                    messages = await channel.messages.fetch({ limit: 100 });
                 }
                 catch (e) {
-                    if (e.status === 429) {
-                        const retryAfter = e.retryAfter || 5000;
-                        await new Promise(resolve => setTimeout(resolve, retryAfter));
-                        try { await message.delete(); } catch (_) { /* Ignore */ }
+                    Client.client.log(Client.client.intlGet(null, 'errorCap'),
+                        Client.client.intlGet(null, 'couldNotPerformMessagesFetch', {
+                            channel: channelId
+                        }), 'error');
+                    break;
+                }
+
+                if (messages.size === 0) break;
+
+                for (let message of messages) {
+                    message = message[1];
+                    try {
+                        await message.delete();
+                        deleteCount++;
+                        if (deleteCount % 4 === 0) {
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+                        }
                     }
-                    else {
-                        Client.client.log(Client.client.intlGet(null, 'errorCap'),
-                            Client.client.intlGet(null, 'couldNotPerformMessageDelete'), 'error');
+                    catch (e) {
+                        if (e.status === 429) {
+                            const retryAfter = e.retryAfter || 5000;
+                            await new Promise(resolve => setTimeout(resolve, retryAfter));
+                            try { await message.delete(); } catch (_) { /* Ignore */ }
+                        }
                     }
                 }
             }
