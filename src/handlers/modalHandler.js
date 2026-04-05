@@ -25,6 +25,7 @@ const Constants = require('../util/constants.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const Keywords = require('../util/keywords.js');
 const Scrape = require('../util/scrape.js');
+const TrackerInputParser = require('../util/trackerInputParser.js');
 
 module.exports = async (client, interaction) => {
     const instance = client.getInstance(interaction.guildId);
@@ -360,39 +361,70 @@ module.exports = async (client, interaction) => {
     else if (interaction.customId.startsWith('TrackerAddPlayer')) {
         const ids = JSON.parse(interaction.customId.replace('TrackerAddPlayer', ''));
         const tracker = instance.trackers[ids.trackerId];
-        const id = interaction.fields.getTextInputValue('TrackerAddPlayerId');
+        const input = interaction.fields.getTextInputValue('TrackerAddPlayerId');
 
         if (!tracker) {
             interaction.deferUpdate();
             return;
         }
 
-        const isSteamId64 = id.length === Constants.STEAMID64_LENGTH ? true : false;
-        const bmInstance = client.battlemetricsInstances[tracker.battlemetricsId];
-
-        if ((isSteamId64 && tracker.players.some(e => e.steamId === id)) ||
-            (!isSteamId64 && tracker.players.some(e => e.playerId === id && e.steamId === null))) {
-            interaction.deferUpdate();
+        const parsed = TrackerInputParser.parseTrackerPlayerInput(input);
+        if (!parsed.valid) {
+            const str = client.intlGet(interaction.guildId, 'trackerPlayerInputInvalid');
+            await client.interactionReply(interaction, { content: str, ephemeral: true });
+            client.log(client.intlGet(null, 'warningCap'), str);
             return;
         }
+
+        const bmInstance = client.battlemetricsInstances[tracker.battlemetricsId];
 
         let name = null;
         let steamId = null;
         let playerId = null;
 
-        if (isSteamId64) {
-            steamId = id;
-            name = await Scrape.scrapeSteamProfileName(client, id);
+        if (parsed.type === 'steamVanityUrl') {
+            const resolvedSteamId = await Scrape.scrapeSteamIdFromVanity(client, parsed.value);
+            if (!resolvedSteamId) {
+                const str = client.intlGet(interaction.guildId, 'trackerPlayerInputInvalid');
+                await client.interactionReply(interaction, { content: str, ephemeral: true });
+                client.log(client.intlGet(null, 'warningCap'), str);
+                return;
+            }
+            steamId = resolvedSteamId;
+            name = await Scrape.scrapeSteamProfileName(client, steamId);
 
             if (name && bmInstance) {
-                playerId = Object.keys(bmInstance.players).find(e => bmInstance.players[e]['name'] === name);
+                playerId = Object.keys(bmInstance.players).find(
+                    e => bmInstance.players[e]['name'] === name);
                 if (!playerId) playerId = null;
             }
         }
-        else {
-            playerId = id;
-            if (bmInstance.players.hasOwnProperty(id)) {
-                name = bmInstance.players[id]['name'];
+        else if (parsed.type === 'steamId') {
+            steamId = parsed.value;
+
+            if (tracker.players.some(e => e.steamId === steamId)) {
+                interaction.deferUpdate();
+                return;
+            }
+
+            name = await Scrape.scrapeSteamProfileName(client, steamId);
+
+            if (name && bmInstance) {
+                playerId = Object.keys(bmInstance.players).find(
+                    e => bmInstance.players[e]['name'] === name);
+                if (!playerId) playerId = null;
+            }
+        }
+        else if (parsed.type === 'battlemetricsId') {
+            playerId = parsed.value;
+
+            if (tracker.players.some(e => e.playerId === playerId && e.steamId === null)) {
+                interaction.deferUpdate();
+                return;
+            }
+
+            if (bmInstance && bmInstance.players.hasOwnProperty(playerId)) {
+                name = bmInstance.players[playerId]['name'];
             }
             else {
                 name = '-';
@@ -408,7 +440,7 @@ module.exports = async (client, interaction) => {
 
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'modalValueChange', {
             id: `${verifyId}`,
-            value: `${id}`
+            value: `${input}`
         }));
 
         await DiscordMessages.sendTrackerMessage(interaction.guildId, ids.trackerId);
@@ -416,26 +448,57 @@ module.exports = async (client, interaction) => {
     else if (interaction.customId.startsWith('TrackerRemovePlayer')) {
         const ids = JSON.parse(interaction.customId.replace('TrackerRemovePlayer', ''));
         const tracker = instance.trackers[ids.trackerId];
-        const id = interaction.fields.getTextInputValue('TrackerRemovePlayerId');
-
-        const isSteamId64 = id.length === Constants.STEAMID64_LENGTH ? true : false;
+        const input = interaction.fields.getTextInputValue('TrackerRemovePlayerId');
 
         if (!tracker) {
             interaction.deferUpdate();
             return;
         }
 
-        if (isSteamId64) {
-            tracker.players = tracker.players.filter(e => e.steamId !== id);
+        const parsed = TrackerInputParser.parseTrackerPlayerInput(input);
+        let useRawRemoval = false;
+
+        if (!parsed.valid) {
+            useRawRemoval = true;
         }
-        else {
-            tracker.players = tracker.players.filter(e => e.playerId !== id || e.steamId !== null);
+
+        if (!useRawRemoval && parsed.type === 'steamVanityUrl') {
+            const resolvedSteamId = await Scrape.scrapeSteamIdFromVanity(client, parsed.value);
+            if (resolvedSteamId) {
+                tracker.players = tracker.players.filter(e => e.steamId !== resolvedSteamId);
+            }
+            else {
+                useRawRemoval = true;
+            }
         }
+        else if (!useRawRemoval && parsed.type === 'steamId') {
+            tracker.players = tracker.players.filter(e => e.steamId !== parsed.value);
+        }
+        else if (!useRawRemoval && parsed.type === 'battlemetricsId') {
+            tracker.players = tracker.players.filter(e => e.playerId !== parsed.value || e.steamId !== null);
+        }
+
+        if (useRawRemoval) {
+            const normalizedInput = input.trim();
+            const beforeCount = tracker.players.length;
+            tracker.players = tracker.players.filter(e =>
+                e.steamId !== normalizedInput &&
+                e.playerId !== normalizedInput &&
+                e.name !== normalizedInput);
+
+            if (tracker.players.length === beforeCount) {
+                const str = client.intlGet(interaction.guildId, 'trackerPlayerInputInvalid');
+                await client.interactionReply(interaction, { content: str, ephemeral: true });
+                client.log(client.intlGet(null, 'warningCap'), str);
+                return;
+            }
+        }
+
         client.setInstance(interaction.guildId, instance);
 
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'modalValueChange', {
             id: `${verifyId}`,
-            value: `${id}`
+            value: `${input}`
         }));
 
         await DiscordMessages.sendTrackerMessage(interaction.guildId, ids.trackerId);

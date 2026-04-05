@@ -54,36 +54,7 @@ async function setupGeneralSettings(client, guildId, channel) {
 
     await client.messageSend(channel, {
         files: [new Discord.AttachmentBuilder(
-            Path.join(__dirname, '..',
-                `resources/images/settings/general_settings_logo_${instance.generalSettings.language}.png`))]
-    });
-
-    await client.messageSend(channel, {
-        embeds: [DiscordEmbeds.getEmbed({
-            color: Constants.COLOR_SETTINGS,
-            title: client.intlGet(guildId, 'selectLanguageSetting'),
-            thumbnail: `attachment://settings_logo.png`,
-            fields: [
-                {
-                    name: client.intlGet(guildId, 'noteCap'),
-                    value: client.intlGet(guildId, 'selectLanguageExtendSetting'),
-                    inline: true
-                }]
-        })],
-        components: [DiscordSelectMenus.getLanguageSelectMenu(guildId, instance.generalSettings.language)],
-        files: [new Discord.AttachmentBuilder(
-            Path.join(__dirname, '..', 'resources/images/settings_logo.png'))]
-    });
-
-    await client.messageSend(channel, {
-        embeds: [DiscordEmbeds.getEmbed({
-            color: Constants.COLOR_SETTINGS,
-            title: client.intlGet(guildId, 'commandsVoiceGenderDesc'),
-            thumbnail: `attachment://settings_logo.png`
-        })],
-        components: [DiscordSelectMenus.getVoiceGenderSelectMenu(guildId, instance.generalSettings.voiceGender)],
-        files: [new Discord.AttachmentBuilder(
-            Path.join(__dirname, '..', 'resources/images/settings_logo.png'))]
+            Path.join(__dirname, '..', 'resources/images/settings/general_settings_logo_en.png'))]
     });
 
     await client.messageSend(channel, {
@@ -286,8 +257,7 @@ async function setupNotificationSettings(client, guildId, channel) {
 
     await client.messageSend(channel, {
         files: [new Discord.AttachmentBuilder(
-            Path.join(__dirname, '..',
-                `resources/images/settings/notification_settings_logo_${instance.generalSettings.language}.png`))]
+            Path.join(__dirname, '..', 'resources/images/settings/notification_settings_logo_en.png'))]
     });
 
     for (const setting in instance.notificationSettings) {
@@ -301,8 +271,7 @@ async function setupNotificationSettings(client, guildId, channel) {
                 DiscordButtons.getNotificationButtons(
                     guildId, setting,
                     instance.notificationSettings[setting].discord,
-                    instance.notificationSettings[setting].inGame,
-                    instance.notificationSettings[setting].voice)],
+                    instance.notificationSettings[setting].inGame)],
             files: [
                 new Discord.AttachmentBuilder(
                     Path.join(__dirname, '..',

@@ -28,7 +28,6 @@ const Constants = require('../util/constants.js');
 const Decay = require('../util/decay.js');
 const DiscordEmbeds = require('../discordTools/discordEmbeds');
 const DiscordMessages = require('../discordTools/discordMessages.js');
-const DiscordVoice = require('../discordTools/discordVoice.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const InGameChatHandler = require('../handlers/inGameChatHandler.js');
 const InstanceUtils = require('../util/instanceUtils.js');
@@ -289,9 +288,6 @@ class RustPlus extends RustPlusLib {
         }
         if (!firstPoll && setting.inGame) {
             await this.sendInGameMessage(`${text}`);
-        }
-        if (!firstPoll && setting.voice) {
-            await DiscordVoice.sendDiscordVoiceMessage(this.guildId, text);
         }
         this.log(Client.client.intlGet(null, 'eventCap'), text);
     }

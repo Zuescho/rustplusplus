@@ -282,14 +282,14 @@ module.exports = {
                     Client.client.intlGet(null, 'couldNotPerformMessagesFetch', { channel: channelId }), 'error');
             }
 
-            if (Object.keys(messages).length === 0) {
+            if (messages.size === 0) {
                 return;
             }
 
             for (let message of messages) {
                 message = message[1];
                 if (!message.author.bot) {
-                    break;
+                    continue;
                 }
 
                 try {

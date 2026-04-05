@@ -51,6 +51,30 @@ module.exports = {
         return null;
     },
 
+    scrapeSteamIdFromVanity: async function (client, vanity) {
+        const response = await module.exports.scrape(
+            `https://steamcommunity.com/id/${vanity}?xml=1`);
+
+        if (response.status !== 200) {
+            client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'failedToScrapeProfileName', {
+                link: `https://steamcommunity.com/id/${vanity}`
+            }), 'error');
+            return null;
+        }
+
+        let match = response.data.match(/<steamID64>(\d{17})<\/steamID64>/);
+        if (match) {
+            return match[1];
+        }
+
+        match = response.data.match(/steamcommunity\.com\/profiles\/(\d{17})/);
+        if (match) {
+            return match[1];
+        }
+
+        return null;
+    },
+
     scrapeSteamProfileName: async function (client, steamId) {
         const response = await module.exports.scrape(`${Constants.STEAM_PROFILES_URL}${steamId}`);
 

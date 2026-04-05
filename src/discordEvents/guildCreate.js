@@ -25,8 +25,6 @@ module.exports = {
         require('../util/CreateCredentialsFile')(client, guild);
         client.fcmListenersLite[guild.id] = new Object();
 
-        client.loadGuildIntl(guild.id);
-
         await client.setupGuild(guild);
     },
 }

@@ -542,15 +542,6 @@ module.exports = {
         await Client.client.interactionEditReply(interaction, content);
     },
 
-    sendVoiceMessage: async function (interaction, state) {
-        const content = {
-            embeds: [DiscordEmbeds.getVoiceEmbed(interaction.guildId, state)],
-            ephemeral: true
-        }
-
-        await Client.client.interactionEditReply(interaction, content);
-    },
-
     sendCraftMessage: async function (interaction, craftDetails, quantity) {
         const content = {
             embeds: [DiscordEmbeds.getCraftEmbed(interaction.guildId, craftDetails, quantity)],

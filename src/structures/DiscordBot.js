@@ -45,8 +45,6 @@ class DiscordBot extends Discord.Client {
         this.fcmListeners = new Object();
         this.fcmListenersLite = new Object();
         this.instances = {};
-        this.guildIntl = {};
-        this.botIntl = null;
         this.enIntl = null;
         this.enMessages = JSON.parse(Fs.readFileSync(Path.join(__dirname, '..', 'languages', 'en.json')), 'utf8');
 
@@ -70,12 +68,9 @@ class DiscordBot extends Discord.Client {
         this.battlemetricsIntervalId = null;
         this.battlemetricsIntervalCounter = 0;
 
-        this.voiceLeaveTimeouts = new Object();
-
         this.loadDiscordCommands();
         this.loadDiscordEvents();
         this.loadEnIntl();
-        this.loadBotIntl();
     }
 
     loadDiscordCommands() {
@@ -117,52 +112,8 @@ class DiscordBot extends Discord.Client {
         }, cache);
     }
 
-    loadBotIntl() {
-        const language = Config.general.language;
-        const path = Path.join(__dirname, '..', 'languages', `${language}.json`);
-        const messages = JSON.parse(Fs.readFileSync(path, 'utf8'));
-        const cache = FormatJS.createIntlCache();
-        this.botIntl = FormatJS.createIntl({
-            locale: language,
-            defaultLocale: 'en',
-            messages: messages
-        }, cache);
-    }
-
-    loadGuildIntl(guildId) {
-        const instance = InstanceUtils.readInstanceFile(guildId);
-        const language = instance.generalSettings.language;
-        const path = Path.join(__dirname, '..', 'languages', `${language}.json`);
-        const messages = JSON.parse(Fs.readFileSync(path, 'utf8'));
-        const cache = FormatJS.createIntlCache();
-        this.guildIntl[guildId] = FormatJS.createIntl({
-            locale: language,
-            defaultLocale: 'en',
-            messages: messages
-        }, cache);
-    }
-
-    loadGuildsIntl() {
-        for (const guild of this.guilds.cache) {
-            this.loadGuildIntl(guild[0]);
-        }
-    }
-
     intlGet(guildId, id, variables = {}) {
-        let intl = null;
-        if (guildId && guildId !== 'en') {
-            intl = this.guildIntl[guildId];
-        }
-        else {
-            if (guildId === 'en') {
-                intl = this.enIntl;
-            }
-            else {
-                intl = this.botIntl;
-            }
-        }
-
-        return intl.formatMessage({
+        return this.enIntl.formatMessage({
             id: id,
             defaultMessage: this.enMessages[id]
         }, variables);

@@ -41,29 +41,7 @@ module.exports = async (client, interaction) => {
         return;
     }
 
-    if (interaction.customId === 'language') {
-        instance.generalSettings.language = interaction.values[0];
-        client.setInstance(guildId, instance);
-
-        if (rustplus) rustplus.generalSettings.language = interaction.values[0];
-
-        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'selectMenuValueChange', {
-            id: `${verifyId}`,
-            value: `${instance.generalSettings.language}`
-        }));
-
-        await interaction.deferUpdate();
-
-        client.loadGuildIntl(guildId);
-
-        await client.interactionEditReply(interaction, {
-            components: [DiscordSelectMenus.getLanguageSelectMenu(guildId, interaction.values[0])]
-        });
-
-        const guild = DiscordTools.getGuild(guildId);
-        await require('../discordTools/RegisterSlashCommands')(client, guild);
-    }
-    else if (interaction.customId === 'Prefix') {
+    if (interaction.customId === 'Prefix') {
         instance.generalSettings.prefix = interaction.values[0];
         client.setInstance(guildId, instance);
 
@@ -110,21 +88,6 @@ module.exports = async (client, interaction) => {
 
         await client.interactionUpdate(interaction, {
             components: [DiscordSelectMenus.getCommandDelaySelectMenu(guildId, interaction.values[0])]
-        });
-    }
-    else if (interaction.customId === 'VoiceGender') {
-        instance.generalSettings.voiceGender = interaction.values[0];
-        client.setInstance(guildId, instance);
-
-        if (rustplus) rustplus.generalSettings.voiceGender = interaction.values[0];
-
-        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'selectMenuValueChange', {
-            id: `${verifyId}`,
-            value: `${instance.generalSettings.voiceGender}`
-        }));
-
-        await client.interactionUpdate(interaction, {
-            components: [DiscordSelectMenus.getVoiceGenderSelectMenu(guildId, interaction.values[0])]
         });
     }
     else if (interaction.customId.startsWith('AutoDayNightOnOff')) {

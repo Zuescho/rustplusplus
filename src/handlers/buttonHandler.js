@@ -60,7 +60,7 @@ module.exports = async (client, interaction) => {
 
         await client.interactionUpdate(interaction, {
             components: [DiscordButtons.getNotificationButtons(
-                guildId, ids.setting, setting.discord, setting.inGame, setting.voice)]
+                guildId, ids.setting, setting.discord, setting.inGame)]
         });
     }
     else if (interaction.customId.startsWith('InGameNotification')) {
@@ -79,26 +79,7 @@ module.exports = async (client, interaction) => {
 
         await client.interactionUpdate(interaction, {
             components: [DiscordButtons.getNotificationButtons(
-                guildId, ids.setting, setting.discord, setting.inGame, setting.voice)]
-        });
-    }
-    else if (interaction.customId.startsWith('VoiceNotification')) {
-        const ids = JSON.parse(interaction.customId.replace('VoiceNotification', ''));
-        const setting = instance.notificationSettings[ids.setting];
-
-        setting.voice = !setting.voice;
-        client.setInstance(guildId, instance);
-
-        if (rustplus) rustplus.notificationSettings[ids.setting].voice = setting.voice;
-
-        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
-            id: `${verifyId}`,
-            value: `${setting.voice}`
-        }));
-
-        await client.interactionUpdate(interaction, {
-            components: [DiscordButtons.getNotificationButtons(
-                guildId, ids.setting, setting.discord, setting.inGame, setting.voice)]
+                guildId, ids.setting, setting.discord, setting.inGame)]
         });
     }
     else if (interaction.customId === 'AllowInGameCommands') {

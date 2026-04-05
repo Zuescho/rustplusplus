@@ -19,12 +19,9 @@
 */
 
 const Discord = require('discord.js');
-const Fs = require('fs');
-const Path = require('path');
 
 const Client = require('../../index.ts');
 const Constants = require('../util/constants.js');
-const Languages = require('../util/languages.js');
 
 module.exports = {
     getSelectMenu: function (options = {}) {
@@ -41,35 +38,6 @@ module.exports = {
         if (options.hasOwnProperty('disabled')) selectMenu.setDisabled(options.disabled);
 
         return selectMenu;
-    },
-
-    getLanguageSelectMenu: function (guildId, language) {
-        const languageFiles = Fs.readdirSync(
-            Path.join(__dirname, '..', 'languages')).filter(file => file.endsWith('.json'));
-
-        const options = [];
-        for (const language of languageFiles) {
-            const langShort = language.replace('.json', '')
-            let langLong = Object.keys(Languages).find(e => Languages[e] === langShort)
-            if (!langLong) langLong = Client.client.intlGet(guildId, 'unknown');
-            options.push({
-                label: `${langLong} (${langShort})`,
-                description: Client.client.intlGet(guildId, 'setBotLanguage', {
-                    language: `${langLong} (${langShort})`
-                }),
-                value: langShort
-            });
-        }
-
-        let currentLanguage = Object.keys(Languages).find(e => Languages[e] === language);
-        if (!currentLanguage) currentLanguage = Client.client.intlGet(guildId, 'unknown');
-
-        return new Discord.ActionRowBuilder().addComponents(
-            module.exports.getSelectMenu({
-                customId: 'language',
-                placeholder: `${currentLanguage} (${language})`,
-                options: options
-            }));
     },
 
     getPrefixSelectMenu: function (guildId, prefix) {
@@ -295,27 +263,6 @@ module.exports = {
                         label: autoOffAnyOnline,
                         description: Client.client.intlGet(guildId, 'smartSwitchAutoOffAnyOnline'),
                         value: '8'
-                    }]
-            }));
-    },
-
-    getVoiceGenderSelectMenu: function (guildId, gender) {
-        return new Discord.ActionRowBuilder().addComponents(
-            module.exports.getSelectMenu({
-                customId: 'VoiceGender',
-                placeholder: `${gender === 'male' ?
-                    Client.client.intlGet(guildId, 'commandsVoiceMale') :
-                    Client.client.intlGet(guildId, 'commandsVoiceFemale')}`,
-                options: [
-                    {
-                        label: Client.client.intlGet(guildId, 'commandsVoiceMale'),
-                        description: Client.client.intlGet(guildId, 'commandsVoiceMaleDescription'),
-                        value: 'male'
-                    },
-                    {
-                        label: Client.client.intlGet(guildId, 'commandsVoiceFemale'),
-                        description: Client.client.intlGet(guildId, 'commandsVoiceFemaleDescription'),
-                        value: 'female'
                     }]
             }));
     },

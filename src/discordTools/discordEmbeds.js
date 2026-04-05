@@ -1177,14 +1177,6 @@ module.exports = {
         });
     },
 
-    getVoiceEmbed: function (guildId, state) {
-        return module.exports.getEmbed({
-            color: Constants.COLOR_DEFAULT,
-            timestamp: true,
-            title: state
-        });
-    },
-
     getCraftEmbed: function (guildId, craftDetails, quantity) {
         let title = '';
         let description = '';
