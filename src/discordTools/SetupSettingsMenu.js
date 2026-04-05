@@ -207,6 +207,21 @@ async function setupGeneralSettings(client, guildId, channel) {
     await client.messageSend(channel, {
         embeds: [DiscordEmbeds.getEmbed({
             color: Constants.COLOR_SETTINGS,
+            title: client.intlGet(guildId, 'mentionUsersSetting'),
+            description: instance.generalSettings.mentionUserIds.length > 0
+                ? instance.generalSettings.mentionUserIds.map(id => `<@${id}>`).join(', ')
+                : client.intlGet(guildId, 'noMentionUsersConfigured'),
+            thumbnail: `attachment://settings_logo.png`
+        })],
+        components: [DiscordSelectMenus.getMentionUsersSelectMenu(guildId,
+            instance.generalSettings.mentionUserIds)],
+        files: [new Discord.AttachmentBuilder(
+            Path.join(__dirname, '..', 'resources/images/settings_logo.png'))]
+    });
+
+    await client.messageSend(channel, {
+        embeds: [DiscordEmbeds.getEmbed({
+            color: Constants.COLOR_SETTINGS,
             title: client.intlGet(guildId, 'itemAvailableNotifyInGameSetting'),
             thumbnail: `attachment://settings_logo.png`
         })],

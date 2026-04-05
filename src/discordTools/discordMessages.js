@@ -29,6 +29,18 @@ const DiscordSelectMenus = require('./discordSelectMenus.js');
 const DiscordTools = require('./discordTools.js');
 const Scrape = require('../util/scrape.js');
 
+function buildMentionContent(guildId, everyone) {
+    const instance = Client.client.getInstance(guildId);
+    const mentions = [];
+    if (everyone) mentions.push('@everyone');
+    if (instance.generalSettings.mentionUserIds && instance.generalSettings.mentionUserIds.length > 0) {
+        for (const userId of instance.generalSettings.mentionUserIds) {
+            mentions.push(`<@${userId}>`);
+        }
+    }
+    return mentions.join(' ');
+}
+
 module.exports = {
     sendMessage: async function (guildId, content, messageId, channelId, interaction = null) {
         if (interaction) {
@@ -207,7 +219,7 @@ module.exports = {
             embeds: [DiscordEmbeds.getDecayingNotificationEmbed(guildId, serverId, entityId)],
             files: [new Discord.AttachmentBuilder(
                 Path.join(__dirname, '..', `resources/images/electrics/${entity.image}`))],
-            content: entity.everyone ? '@everyone' : ''
+            content: buildMentionContent(guildId, entity.everyone)
         }
 
         await module.exports.sendMessage(guildId, content, null, instance.channelId.activity);
@@ -221,7 +233,7 @@ module.exports = {
             embeds: [DiscordEmbeds.getStorageMonitorDisconnectNotificationEmbed(guildId, serverId, entityId)],
             files: [new Discord.AttachmentBuilder(
                 Path.join(__dirname, '..', `resources/images/electrics/${entity.image}`))],
-            content: entity.everyone ? '@everyone' : ''
+            content: buildMentionContent(guildId, entity.everyone)
         }
 
         await module.exports.sendMessage(guildId, content, null, instance.channelId.activity);
@@ -235,7 +247,7 @@ module.exports = {
             embeds: [await DiscordEmbeds.getStorageMonitorNotFoundEmbed(guildId, serverId, entityId)],
             files: [new Discord.AttachmentBuilder(
                 Path.join(__dirname, '..', `resources/images/electrics/${entity.image}`))],
-            content: entity.everyone ? '@everyone' : ''
+            content: buildMentionContent(guildId, entity.everyone)
         }
 
         await module.exports.sendMessage(guildId, content, null, instance.channelId.activity);
@@ -262,7 +274,7 @@ module.exports = {
             embeds: [await DiscordEmbeds.getSmartAlarmNotFoundEmbed(guildId, serverId, entityId)],
             files: [new Discord.AttachmentBuilder(
                 Path.join(__dirname, '..', `resources/images/electrics/${entity.image}`))],
-            content: entity.everyone ? '@everyone' : ''
+            content: buildMentionContent(guildId, entity.everyone)
         }
 
         await module.exports.sendMessage(guildId, content, null, instance.channelId.activity);
@@ -276,7 +288,7 @@ module.exports = {
             embeds: [await DiscordEmbeds.getAlarmEmbed(guildId, serverId, entityId)],
             files: [new Discord.AttachmentBuilder(
                 Path.join(__dirname, '..', `resources/images/electrics/${entity.image}`))],
-            content: entity.everyone ? '@everyone' : ''
+            content: buildMentionContent(guildId, entity.everyone)
         }
 
         await module.exports.sendMessage(guildId, content, null, instance.channelId.activity);
@@ -299,7 +311,7 @@ module.exports = {
             embeds: [DiscordEmbeds.getServerWipeDetectedEmbed(guildId, serverId)],
             files: [new Discord.AttachmentBuilder(
                 Path.join(__dirname, '..', '..', `maps/${guildId}_map_full.png`))],
-            content: instance.generalSettings.mapWipeNotifyEveryone ? '@everyone' : ''
+            content: buildMentionContent(guildId, instance.generalSettings.mapWipeNotifyEveryone)
         }
 
         await module.exports.sendMessage(guildId, content, null, instance.channelId.activity);

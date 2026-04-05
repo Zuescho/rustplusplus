@@ -20,6 +20,8 @@
 
 const Discord = require('discord.js');
 
+const Constants = require('../util/constants.js');
+const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordSelectMenus = require('../discordTools/discordSelectMenus.js');
 const DiscordTools = require('../discordTools/discordTools.js');
@@ -88,6 +90,31 @@ module.exports = async (client, interaction) => {
 
         await client.interactionUpdate(interaction, {
             components: [DiscordSelectMenus.getCommandDelaySelectMenu(guildId, interaction.values[0])]
+        });
+    }
+    else if (interaction.customId === 'MentionUsers') {
+        instance.generalSettings.mentionUserIds = interaction.values;
+        client.setInstance(guildId, instance);
+
+        if (rustplus) rustplus.generalSettings.mentionUserIds = interaction.values;
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'selectMenuValueChange', {
+            id: `${verifyId}`,
+            value: `${interaction.values.join(', ')}`
+        }));
+
+        const description = interaction.values.length > 0
+            ? interaction.values.map(id => `<@${id}>`).join(', ')
+            : client.intlGet(guildId, 'noMentionUsersConfigured');
+
+        await client.interactionUpdate(interaction, {
+            embeds: [DiscordEmbeds.getEmbed({
+                color: Constants.COLOR_SETTINGS,
+                title: client.intlGet(guildId, 'mentionUsersSetting'),
+                description: description,
+                thumbnail: `attachment://settings_logo.png`
+            })],
+            components: [DiscordSelectMenus.getMentionUsersSelectMenu(guildId, interaction.values)]
         });
     }
     else if (interaction.customId.startsWith('AutoDayNightOnOff')) {

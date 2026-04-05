@@ -482,9 +482,16 @@ async function alarmRaidAlarm(client, guild, title, message, body) {
         files.push(new Discord.AttachmentBuilder(Path.join(__dirname, '..', `resources/images/rocket.png`)));
     }
 
+    const mentions = ['@everyone'];
+    if (instance.generalSettings.mentionUserIds && instance.generalSettings.mentionUserIds.length > 0) {
+        for (const userId of instance.generalSettings.mentionUserIds) {
+            mentions.push(`<@${userId}>`);
+        }
+    }
+
     const content = {
         embeds: [DiscordEmbeds.getAlarmRaidAlarmEmbed({ title: title, message: message }, body)],
-        content: '@everyone',
+        content: mentions.join(' '),
         files: files
     }
 

@@ -187,6 +187,21 @@ module.exports = {
             }));
     },
 
+    getMentionUsersSelectMenu: function (guildId, currentUserIds = []) {
+        const menu = new Discord.UserSelectMenuBuilder()
+            .setCustomId('MentionUsers')
+            .setPlaceholder(
+                currentUserIds.length > 0
+                    ? Client.client.intlGet(guildId, 'currentMentionUsersPlaceholder', {
+                        count: `${currentUserIds.length}`
+                    })
+                    : Client.client.intlGet(guildId, 'selectMentionUsersPlaceholder'))
+            .setMinValues(0)
+            .setMaxValues(10);
+
+        return new Discord.ActionRowBuilder().addComponents(menu);
+    },
+
     getSmartSwitchSelectMenu: function (guildId, serverId, entityId) {
         const instance = Client.client.getInstance(guildId);
         const entity = instance.serverList[serverId].switches[entityId];
