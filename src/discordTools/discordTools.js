@@ -286,6 +286,7 @@ module.exports = {
                 return;
             }
 
+            let deleteCount = 0;
             for (let message of messages) {
                 message = message[1];
                 if (!message.author.bot) {
@@ -294,10 +295,22 @@ module.exports = {
 
                 try {
                     await message.delete();
+                    deleteCount++;
+                    /* Respect Discord rate limit: 5 deletes per ~5 seconds */
+                    if (deleteCount % 4 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    }
                 }
                 catch (e) {
-                    Client.client.log(Client.client.intlGet(null, 'errorCap'),
-                        Client.client.intlGet(null, 'couldNotPerformMessageDelete'), 'error');
+                    if (e.status === 429) {
+                        const retryAfter = e.retryAfter || 5000;
+                        await new Promise(resolve => setTimeout(resolve, retryAfter));
+                        try { await message.delete(); } catch (_) { /* Ignore */ }
+                    }
+                    else {
+                        Client.client.log(Client.client.intlGet(null, 'errorCap'),
+                            Client.client.intlGet(null, 'couldNotPerformMessageDelete'), 'error');
+                    }
                 }
             }
         }
