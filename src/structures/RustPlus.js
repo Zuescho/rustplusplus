@@ -274,8 +274,8 @@ class RustPlus extends RustPlusLib {
         this.log(Client.client.intlGet(null, 'infoCap'), Client.client.intlGet(null, `logInGameCommand`, args));
     }
 
-    sendInGameMessage(message) {
-        InGameChatHandler.inGameChatHandler(this, Client.client, message);
+    sendInGameMessage(message, force = false) {
+        InGameChatHandler.inGameChatHandler(this, Client.client, message, force);
     }
 
     async sendEvent(setting, text, event, embed_color, firstPoll = false, image = null) {

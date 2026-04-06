@@ -191,7 +191,7 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
         await DiscordMessages.sendSmartAlarmTriggerMessage(rustplus.guildId, serverId, entityId);
 
         if (instance.generalSettings.smartAlarmNotifyInGame) {
-            rustplus.sendInGameMessage(`${server.alarms[entityId].name}: ${server.alarms[entityId].message}`);
+            rustplus.sendInGameMessage(`${server.alarms[entityId].name}: ${server.alarms[entityId].message}`, true);
         }
 
         for (const [groupId, group] of Object.entries(server.switchGroups)) {

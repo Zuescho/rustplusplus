@@ -21,7 +21,7 @@
 const Constants = require("../util/constants");
 
 module.exports = {
-    inGameChatHandler: async function (rustplus, client, message = null) {
+    inGameChatHandler: async function (rustplus, client, message = null, force = false) {
         const guildId = rustplus.guildId;
         const generalSettings = rustplus.generalSettings;
         const commandDelayMs = parseInt(generalSettings.commandDelay) * 1000;
@@ -52,7 +52,7 @@ module.exports = {
         /* if there is a new message, add message to queue. */
         if (message !== null) {
             if (rustplus.team === null || rustplus.team.allOffline ||
-                rustplus.generalSettings.muteInGameBotMessages) {
+                (!force && rustplus.generalSettings.muteInGameBotMessages)) {
                 return;
             }
 
