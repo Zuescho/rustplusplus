@@ -14,7 +14,7 @@ For setup, pairing and credential instructions see the <a href="https://github.c
 
 ## Headline features in this fork
 
-### 🛰️ Smarter tracker
+### (◉‿◉) Smarter tracker
 
 - **`/tracker add|remove|list`** slash command with **native Discord autocomplete** on both the tracker and player options. Player search merges the bot's online cache with a Battlemetrics server-scoped lookup, raced against Discord's 3-second budget.
 - **Active-hours hint** next to each tracked player (e.g. `~18–23 daily`), computed from a local SQLite log of polling snapshots aggregated over 30 days.
@@ -23,7 +23,7 @@ For setup, pairing and credential instructions see the <a href="https://github.c
 - Player rows now show **plain name + small B / S markdown links** to Battlemetrics and Steam profiles.
 - Modal accepts a plain ID **or** a full Steam/BM profile URL.
 
-### 📦 Cargo Ship lifecycle (slim port of FaiThiX 421aa27)
+### ┌[¯|¯]┘ Cargo Ship lifecycle (slim port of FaiThiX 421aa27)
 
 - Full state machine: **docking → docked → undocking → leaving**, each with its own toggleable Discord notification.
 - **Locked-crate spawn alerts** for each of the 3 expected spawns on the ship.
@@ -31,18 +31,18 @@ For setup, pairing and credential instructions see the <a href="https://github.c
 - New in-game commands: **`!cargo`** (rich per-ship summary) and **`!cargo timer`** (sorted list of pending timers).
 - Direction-based "is leaving" fallback for maps without harbors.
 
-### 🔔 Smart Alarm RF event tagging
+### (°ロ°)! Smart Alarm RF event tagging
 
 Tag a Smart Alarm in the Edit modal with an event name (e.g. `Large Excavator`, `Cargo Ship`). When the linked RF receiver
 fires, the bot announces **both start AND stop** in the activity channel and team chat — perfect for tracking
 powered in-game events the Rust+ API doesn't expose directly.
 
-### 🌐 Translated team chat channel
+### (=・ω・)ﾉ Translated team chat channel
 
 A dedicated `teamchat-translated` channel that automatically translates non-English/German player messages into English via
 offline language detection (`franc-min`). Toggleable in settings, defaults to off.
 
-### 🛡️ Other quality-of-life
+### (•‿•) Other quality-of-life
 
 - Smart switch on/off announcements bypass the in-game mute (same fix as Smart Alarms in v1.25.5).
 - Battlemetrics request queue + 0–30 s poll-cycle jitter — no more burst rate-limit hits with many servers.
@@ -53,7 +53,7 @@ offline language detection (`franc-min`). Toggleable in settings, defaults to of
 - Shorthand `!timer <time> [message]` (no `add` subcommand needed).
 - Asset-path monument tokens are no longer drawn over the map.
 
-### ✂️ Slimmed for focus
+### ┐(￣ヘ￣)┌ Slimmed for focus
 
 Removed features the fork's target audience doesn't use:
 - RustLabs lookup commands (`!craft / decay / despawn / recycle / research / stack / upkeep`) and their 21 MB of data — use rustlabs.com instead.
