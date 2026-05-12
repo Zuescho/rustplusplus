@@ -20,7 +20,7 @@
 
 const Client = require('../../index.ts');
 const RandomUsernames = require('../staticFiles/RandomUsernames.json');
-const Utils = require = require('../util/utils.js');
+const Utils = require('../util/utils.js');
 const BmRateLimiter = require('../util/battlemetricsRateLimiter.js');
 
 const SERVER_LOG_SIZE = 1000;
