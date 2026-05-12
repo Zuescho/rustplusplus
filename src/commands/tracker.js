@@ -185,20 +185,13 @@ module.exports = {
             let steamId = null;
             const playerId = playerKey;
 
-            /* Best-effort: try to resolve a Steam ID from the BM player profile.
-               If the lookup fails or there's no match, we still add the player —
-               steamId is optional. */
-            if (bmInstance) {
-                try {
-                    const profile = await bmInstance.getProfileData(playerId);
-                    if (Array.isArray(profile) && profile.length) {
-                        /* getProfileData returns name identifiers, not steam IDs.
-                           Steam IDs need a different include — punt and let the
-                           existing Scrape path fill them in next pattern cycle. */
-                    }
-                }
-                catch { /* ignore */ }
+            /* Player wasn't in the live online cache — try the autocomplete
+               cache and finally a direct BM /players/{id} lookup so offline
+               players show with their real name instead of just their BM id. */
+            if (!name) {
+                name = await PlayerSearch.resolveNameById(bmInstance, playerId);
             }
+
             if (!name) name = playerKey;
             if (tracker.clanTag) name = `${tracker.clanTag} ${name}`;
 

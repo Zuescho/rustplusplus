@@ -60,6 +60,21 @@ module.exports = {
 
                 if (!bmInstance || !bmInstance.lastUpdateSuccessful) continue;
 
+                /* Self-heal: if a player was added via /tracker add while
+                   offline, their `name` may still equal the BM id. As soon as
+                   we see them in the BM roster with a real name, write it
+                   back to the instance file so the embed renders correctly. */
+                let nameFixed = false;
+                for (const player of content.players) {
+                    if (!player.playerId) continue;
+                    const bmPlayer = bmInstance.players[player.playerId];
+                    if (!bmPlayer || !bmPlayer.name) continue;
+                    if (player.name && player.name !== player.playerId) continue;
+                    player.name = (content.clanTag ? `${content.clanTag} ` : '') + bmPlayer.name;
+                    nameFixed = true;
+                }
+                if (nameFixed) client.setInstance(guildId, instance);
+
                 /* Snapshot every tracked player's current online state into
                    activity_log. This is the foundation for the typical-play-hours
                    hint and the off-hours raid alarm. Cheap insert per player. */

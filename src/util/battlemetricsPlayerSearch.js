@@ -114,4 +114,39 @@ async function search(bmInstance, serverId, query) {
     return merged;
 }
 
-module.exports = { search };
+/**
+ * Resolve a player's display name from their BM player ID.
+ * Tries (in order): the live bmInstance.players cache, the autocomplete
+ * search cache, and finally a direct GET /players/{id} via the rate-limited
+ * queue. Returns null when nothing can be found.
+ *
+ * @param {object} bmInstance The Battlemetrics instance for the tracker's server, or null.
+ * @param {string} playerId   The BM player ID to resolve.
+ * @returns {Promise<string|null>}
+ */
+async function resolveNameById(bmInstance, playerId) {
+    if (!playerId) return null;
+
+    if (bmInstance && bmInstance.players && bmInstance.players[playerId]
+        && bmInstance.players[playerId].name) {
+        return bmInstance.players[playerId].name;
+    }
+
+    for (const { results } of _cache.values()) {
+        const hit = results.find(r => r.id === playerId);
+        if (hit && hit.name && hit.name !== playerId) return hit.name;
+    }
+
+    try {
+        const url = `https://api.battlemetrics.com/players/${encodeURIComponent(playerId)}`;
+        const response = await BmRateLimiter.scheduleGet(url, { timeout: 8000 });
+        const name = response && response.data && response.data.data &&
+            response.data.data.attributes && response.data.data.attributes.name;
+        if (name) return String(name);
+    }
+    catch { /* swallow — caller will fall back to the ID */ }
+
+    return null;
+}
+
+module.exports = { search, resolveNameById };

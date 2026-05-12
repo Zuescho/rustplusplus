@@ -34,6 +34,14 @@ module.exports = async function (rustplus, client, message) {
                 await DiscordMessages.sendTeamChatTranslatedMessage(
                     rustplus.guildId, message, result.translatedText, result.detected);
             }
+            else {
+                /* Log why we skipped so it's diagnosable from the bot log
+                   without needing extra Discord noise. */
+                const reason = result.error ? `error=${result.error}`
+                    : `detected=${result.detected || 'n/a'}`;
+                client.log(client.intlGet(null, 'infoCap'),
+                    `teamChatTranslate skip: ${reason} text="${message.message}"`);
+            }
         }
         catch (e) {
             client.log(client.intlGet(null, 'errorCap'),
