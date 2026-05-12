@@ -29,5 +29,12 @@ module.exports = {
         clientId: process.env.RPP_DISCORD_CLIENT_ID || '',
         token: process.env.RPP_DISCORD_TOKEN || '',
         needAdminPrivileges: process.env.RPP_NEED_ADMIN_PRIVILEGES || true, /* If true, only admins can delete (server, switch..), manage credentials and reset a channel */
+    },
+    translate: {
+        /* If set, the team-chat translator routes through this LibreTranslate
+           instance instead of the (unreliable) free Google web endpoint. Point
+           at a sidecar container, e.g. `http://libretranslate:5000`. */
+        libretranslateUrl: process.env.RPP_LIBRETRANSLATE_URL || '',
+        libretranslateApiKey: process.env.RPP_LIBRETRANSLATE_API_KEY || '',
     }
 };

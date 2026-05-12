@@ -4,24 +4,39 @@
     "teamchatTranslated" Discord channel.
 
     Detection uses franc-min (offline trigram model, no network calls).
-    Translation reuses the same `translate` package the bot already uses for
-    the in-game `!tr` command — auto-detect on Google's side handles whatever
-    source language the player actually wrote in (Spanish, Portuguese, etc.),
-    so the franc verdict only needs to be confident enough to say "this is NOT
-    English or German".
+
+    Translation: if RPP_LIBRETRANSLATE_URL is set, the bot POSTs to a
+    self-hosted LibreTranslate sidecar (recommended — fully local, no
+    rate-limits). Otherwise it falls back to the `translate` package's free
+    Google web endpoint, which is unreliable and frequently returns the
+    source string unchanged.
 
     Results are cached briefly so two players echoing the same phrase don't
     cost two API calls.
 */
 
+const Axios = require('axios');
 const Franc = require('franc-min');
 const Translate = require('translate');
+
+const Config = require('../../config');
 
 /* ISO-639-3 codes for the languages we want to leave alone. */
 const PASSTHROUGH_LANGS = new Set(['eng', 'deu']);
 const MIN_LENGTH = 12;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX = 200;
+
+/* Franc returns ISO-639-3; LibreTranslate expects ISO-639-1. Only the
+   common-on-Rust languages we expect to actually see; anything not in this
+   map falls through to LT's `source: "auto"` which does its own detection. */
+const FRANC_TO_LT = {
+    spa: 'es', por: 'pt', fra: 'fr', ita: 'it', rus: 'ru', ukr: 'uk',
+    nld: 'nl', pol: 'pl', ces: 'cs', slk: 'sk', swe: 'sv', dan: 'da',
+    nor: 'no', fin: 'fi', tur: 'tr', ron: 'ro', hun: 'hu', ell: 'el',
+    bul: 'bg', srp: 'sr', hrv: 'hr', slv: 'sl', cmn: 'zh', jpn: 'ja',
+    kor: 'ko', ara: 'ar', heb: 'he', tha: 'th', vie: 'vi', ind: 'id',
+};
 
 const _cache = new Map(); /* text -> { at, result } */
 
@@ -54,6 +69,25 @@ function _normalize(text) {
         .trim();
 }
 
+async function _libreTranslate(text, detected) {
+    const baseUrl = (Config.translate.libretranslateUrl || '').replace(/\/+$/, '');
+    const url = `${baseUrl}/translate`;
+    const source = FRANC_TO_LT[detected] || 'auto';
+    const body = {
+        q: text,
+        source,
+        target: 'en',
+        format: 'text',
+    };
+    if (Config.translate.libretranslateApiKey) body.api_key = Config.translate.libretranslateApiKey;
+
+    const response = await Axios.post(url, body, { timeout: 8000 });
+    if (response && response.data && typeof response.data.translatedText === 'string') {
+        return response.data.translatedText;
+    }
+    return null;
+}
+
 /**
  * @param {string} text The raw team-chat message body.
  * @returns {Promise<{shouldPost:boolean, translatedText?:string, detected?:string}>}
@@ -79,11 +113,14 @@ async function detectAndTranslate(text) {
     }
 
     let translatedText = null;
+    const provider = Config.translate.libretranslateUrl ? 'libre' : 'google';
     try {
-        translatedText = await Translate(text, 'en');
+        translatedText = provider === 'libre'
+            ? await _libreTranslate(text, detected)
+            : await Translate(text, 'en');
     }
     catch (e) {
-        const result = { shouldPost: false, detected, error: e.message };
+        const result = { shouldPost: false, detected, error: e.message, provider };
         _cacheSet(clean, result);
         return result;
     }
@@ -100,6 +137,7 @@ async function detectAndTranslate(text) {
         translatedText: translatedText || text,
         detected,
         unchanged,
+        provider,
     };
     _cacheSet(clean, result);
     return result;

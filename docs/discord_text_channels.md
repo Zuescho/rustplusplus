@@ -99,6 +99,8 @@ Each event type has its own setting in the Settings channel that controls whethe
 ## Teamchat-Translated Channel
 
 > When the **Translate non-English/German team-chat messages** setting is enabled in the Settings channel, any player message that the bot detects as something other than English or German is translated to English and posted here. The original message is quoted below the translation. Detection uses an offline trigram model (franc-min); very short messages are skipped because they're unreliable to identify.
+>
+> Translation backend: when the bot is started with `RPP_LIBRETRANSLATE_URL` pointing at a LibreTranslate sidecar (see [Deploying in the README](../README.md#deploying)), all translation happens locally with no rate limits. Without that env var the bot falls back to the `translate` package's free Google web endpoint, which often returns the source text unchanged — the embed header will then read `(<lang> → en, translator no-op)` so the source is still visible.
 
 
 ## Switches Channel
