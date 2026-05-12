@@ -44,9 +44,9 @@ powered in-game events the Rust+ API doesn't expose directly.
 ### (=・ω・)ﾉ Translated team chat channel
 
 A dedicated `teamchat-translated` channel that automatically translates non-English/German player messages into English.
-Detection is fully offline (`franc-min`). Translation routes to a self-hosted **LibreTranslate** sidecar when
-`RPP_LIBRETRANSLATE_URL` is set (recommended — no rate limits, fully local) and falls back to the `translate` package's
-free Google web endpoint otherwise. Toggleable in settings, defaults to off.
+Detection is fully offline (`franc-min`). A **bundled LibreTranslate** with the Spanish → English model ships inside the
+Docker image and handles all Spanish lines locally — no rate limits, no API key, no external container. Other detected
+languages fall back to the `translate` package's free Google web endpoint. Toggleable in settings, defaults to off.
 
 ### (•‿•) Other quality-of-life
 
@@ -81,30 +81,15 @@ services:
     environment:
       - RPP_DISCORD_TOKEN=TOKEN
       - RPP_DISCORD_CLIENT_ID=CLIENT_ID
-      # Optional: route the translated-teamchat channel through a local
-      # LibreTranslate container (see service below). Omit both vars to fall
-      # back to the (rate-limited) free Google endpoint.
-      - RPP_LIBRETRANSLATE_URL=http://libretranslate:5000
     volumes:
       - ./logs:/app/logs
       - ./instances:/app/instances
       - ./credentials:/app/credentials
       - ./maps:/app/maps
     restart: unless-stopped
-    depends_on:
-      - libretranslate
-
-  libretranslate:
-    image: libretranslate/libretranslate:latest
-    environment:
-      # Load only the languages you actually see in team chat — full set is
-      # ~3 GB, a handful of European languages is well under 1 GB.
-      - LT_LOAD_ONLY=en,de,es,pt,fr,ru,it,nl,pl,tr
-      - LT_DISABLE_WEB_UI=true
-    volumes:
-      - ./libretranslate:/home/libretranslate/.local
-    restart: unless-stopped
 ```
+
+The image bundles a minimal LibreTranslate (Spanish → English only) on `127.0.0.1:5000`, started by the container's own entrypoint. Translation works out of the box — no sidecar, no API key, no network calls. To use an external LibreTranslate instead, set `RPP_LIBRETRANSLATE_URL=http://your-host:5000` at run time; setting it to an empty string disables the libre path entirely and falls back to the (rate-limited) free Google web endpoint.
 
 Existing `instances/*.json` files are migrated in place — paired alarms, switches, trackers, settings and channel IDs all survive upgrades.
 

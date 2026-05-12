@@ -100,7 +100,7 @@ Each event type has its own setting in the Settings channel that controls whethe
 
 > When the **Translate non-English/German team-chat messages** setting is enabled in the Settings channel, any player message that the bot detects as something other than English or German is translated to English and posted here. The original message is quoted below the translation. Detection uses an offline trigram model (franc-min); very short messages are skipped because they're unreliable to identify.
 >
-> Translation backend: when the bot is started with `RPP_LIBRETRANSLATE_URL` pointing at a LibreTranslate sidecar (see [Deploying in the README](../README.md#deploying)), all translation happens locally with no rate limits. Without that env var the bot falls back to the `translate` package's free Google web endpoint, which often returns the source text unchanged — the embed header will then read `(<lang> → en, translator no-op)` so the source is still visible.
+> Translation backend: the Docker image bundles a minimal LibreTranslate (Spanish → English only) on `127.0.0.1:5000`, started automatically by the container entrypoint. Spanish lines are translated entirely on-box. Other detected languages fall back to the `translate` package's free Google web endpoint, which sometimes returns the source text unchanged — the embed header then reads `(<lang> → en, translator no-op)` so the source is still visible. To use an external LibreTranslate instance instead, set `RPP_LIBRETRANSLATE_URL` to its URL; set the variable to an empty string to disable the libre path entirely.
 
 
 ## Switches Channel
