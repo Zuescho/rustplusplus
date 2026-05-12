@@ -396,7 +396,7 @@ module.exports = {
         await module.exports.sendMessage(guildId, content, null, instance.channelId.teamchat);
     },
 
-    sendTeamChatTranslatedMessage: async function (guildId, message, translatedText, detectedLang) {
+    sendTeamChatTranslatedMessage: async function (guildId, message, translatedText, detectedLang, unchanged = false) {
         const instance = Client.client.getInstance(guildId);
         if (!instance.channelId.teamchatTranslated) return;
 
@@ -405,7 +405,7 @@ module.exports = {
             color = instance.teamChatColors[message.steamId];
         }
 
-        const langTag = detectedLang ? ` (${detectedLang} → en)` : '';
+        const langTag = detectedLang ? ` (${detectedLang} → en${unchanged ? ', translator no-op' : ''})` : '';
         const description = `**${message.name}**${langTag}\n${translatedText}\n> ${message.message}`;
 
         const content = {

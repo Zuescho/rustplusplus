@@ -88,15 +88,19 @@ async function detectAndTranslate(text) {
         return result;
     }
 
-    /* If the translation came back essentially unchanged, the source was
-       probably already close enough to English — skip to avoid noise. */
-    if (translatedText && translatedText.trim().toLowerCase() === text.trim().toLowerCase()) {
-        const result = { shouldPost: false, detected };
-        _cacheSet(clean, result);
-        return result;
-    }
+    /* The free Google web endpoint occasionally returns the source string
+       unchanged (rate-limit, malformed HTML, etc). Franc already decided
+       this isn't English/German, so post the message anyway — but mark it
+       as unchanged so the reader knows the translator didn't do anything. */
+    const unchanged = translatedText
+        && translatedText.trim().toLowerCase() === text.trim().toLowerCase();
 
-    const result = { shouldPost: true, translatedText, detected };
+    const result = {
+        shouldPost: true,
+        translatedText: translatedText || text,
+        detected,
+        unchanged,
+    };
     _cacheSet(clean, result);
     return result;
 }
