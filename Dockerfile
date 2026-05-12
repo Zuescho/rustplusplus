@@ -1,6 +1,9 @@
-FROM node:18
+FROM node:22-slim
 
-RUN apt-get update && apt-get install -y graphicsmagick && apt-get clean
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends graphicsmagick \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

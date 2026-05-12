@@ -18,6 +18,9 @@
         "url": "https://github.com/faithix/rustplusplus/issues"
     },
     "homepage": "https://github.com/faithix/rustplusplus#readme",
+    "engines": {
+        "node": ">=22.0.0"
+    },
     "dependencies": {
         "@discordjs/rest": "^2.5.1",
         "@formatjs/intl": "^2.6.9",
