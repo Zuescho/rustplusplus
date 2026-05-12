@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Node.js.webp" alt="rustplusplus logo" width="200" />
+</p>
+
 <h1 align="center"><em><b>rustplusplus</b> ~ Rust+ Discord Bot (Fork)</em></h1>
 
 <p align="center">
