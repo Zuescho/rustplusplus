@@ -1072,6 +1072,11 @@ module.exports = async (client, interaction) => {
             return;
         }
 
+        /* The deep-heal below can take a few seconds (rate-limited BM HTTP
+           queue), so ack the click within Discord's 3-second budget first
+           and update the message by id afterwards. */
+        try { await interaction.deferUpdate(); } catch { /* already acked */ }
+
         /* Actively resolve any placeholder names ('-', empty, or just the
            BM id) — hits the live BM cache first and falls back to a direct
            BM /players/{id} lookup so the user doesn't have to wait for the
@@ -1086,7 +1091,7 @@ module.exports = async (client, interaction) => {
                 `TrackerUpdate heal failed: ${e.message}`, 'error');
         }
 
-        await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId, interaction);
+        await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId);
     }
     else if (interaction.customId.startsWith('TrackerEdit')) {
         const ids = JSON.parse(interaction.customId.replace('TrackerEdit', ''));
