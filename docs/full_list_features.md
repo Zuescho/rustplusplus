@@ -1,103 +1,97 @@
-# Full list of Features
+# Feature Overview
+
+A high-level inventory of what this fork can do. For setup, see [documentation.md](documentation.md); for the exhaustive command reference see [commands.md](commands.md).
 
 ## Discord Slash Commands
-- **/alarm** - Change image of paired Smart Alarms.
-- **/alias** - Create an alias for a command/sequence of characters.
-- **/blacklist** - Blacklist a user from using the bot.
-- **/cctv** - Get cctv camera codes for monuments.
-- **/craft** - Display the cost to craft an item.
-- **/credentials** - Setup Credentials.
-- **/decay** - Display the decay time of an item.
-- **/help** - Get help message.
-- **/item** - Get the details of an item.
-- **/leader** - Transfer leadership.
-- **/map** - Display the In-Game Map.
-- **/market** - Search for or subscribe to items in vending machines.
-- **/players** - Get Battlemetrics data on all connected players.
-- **/recycle** - Display the output of recycling an item.
-- **/research** - Display the cost to research an item.
-- **/reset** - Reset Discord Channels.
-- **/role** - Setup a specific role to use rustplusplus.
-- **/storagemonitor** - Change image of paired Storage Monitors.
-- **/switch** - Change image of paired Storage Monitors.
-- **/upkeep** - Get the upkeep cost of an item.
-- **/uptime** - Get the current uptime for rustplusplus.
-- **/voice** - Let rustplusplus join voicechat.
+
+| Command | Purpose |
+| --- | --- |
+| `/alarm` | Edit a Smart Alarm (name, message, command, image, **event tag**). |
+| `/alias` | Custom command aliases. |
+| `/blacklist`, `/whitelist`, `/ingameaccess` | User-level access control. |
+| `/credentials` | FCM credentials management. |
+| `/help` | Doc links. |
+| `/item` | Item name/ID lookup. |
+| `/leader` | Transfer leadership. |
+| `/map` | Show the server map. |
+| `/players` | Battlemetrics player lookup. |
+| `/reset`, `/role` | Channel + role administration. |
+| `/storagemonitor`, `/switch` | Edit smart-device images. |
+| **`/tracker`** | **Add, remove or list players on a tracker — with native Discord autocomplete on both options.** |
+| `/uptime` | Bot + server uptime. |
 
 ## In-Game Commands
-- **afk** - Display afk teammates.
-- **alive** - Display who has been alive longest.
-- **cargo** - Display information regarding Cargoship.
-- **chinook** - Display information regarding Chinook 47.
-- **connection/connections** - Display latest team connections.
-- **craft** - Display the cost to craft an item.
-- **death/deaths** - Display latest deaths.
-- **decay** - Display the decay time of an item.
-- **events** - Get recent events.
-- **heli** - Get information regarding Patrol Helicopter.
-- **large** - Get information regarding Large Oil Rig.
-- **leader** - Transfer leadership.
-- **marker/markers** - Set markers to navigate to.
-- **market** - Search for or subscribe to items in vending machines.
-- **mute** - Mute rustplusplus In-Game.
-- **note/notes** - Add notes.
-- **offline** - Display offline teammates.
-- **online** - Display online teammates.
-- **player/players** - Get Battlemetrics information about players.
-- **pop** - Get population of the server.
-- **prox** - Display teammates that are nearby.
-- **recycle** - Display the output of recycling an item.
-- **research** - Display the cost to research an item.
-- **send** - Send a message through rustplusplus to a person on Discord.
-- **small** - Get information regarding Small Oil Rig.
-- **steamid** - Get teammate steamid.
-- **team** - Get team information (names of all teammates).
-- **time** - Get In-Game time.
-- **timer/timers** - Setup timers.
-- **tr** - Translate from English to another language.
-- **trf** - Translate from one language to another.
-- **tts** - Text-To-Speech (Need to have teamchat open in Discord).
-- **unmute** - Unmute rustplusplus In-Game.
-- **upkeep** - Check upkeep of Storage Monitor Tool Cupboards.
-- **uptime** - Display the uptime of rustplusplus and currently connected server.
-- **vendor** - Get information regarding the Traveling Vendor
-- **wipe** - Display time since wipe.
+
+Server / event info: `cargo`, `chinook`, `deepsea`, `events`, `heli`, `large`, `pop`, `small`, `time`, `vendor`, `wipe`.
+Team utilities: `afk`, `alive`, `connection(s)`, `death(s)`, `leader`, `marker(s)`, `mute`, `note(s)`, `offline`, `online`, `player(s)`, `prox`, `send`, `steamid`, `team`, `timer(s)`, `unmute`, `uptime`.
+Translation: `tr`, `trf`.
+
+**`!cargo`** is enriched in this fork — see [commands.md](commands.md#cargo) for the `!cargo timer` subcommand and the rich summary output.
 
 ## Smart Devices
-> Pair Smart Devices such as `Smart Switches`, `Smart Alarms`, `Storage Monitors` and control them from Discord or In-Game teamchat.
 
-- See [Smart Switches](smart_devices.md#smart-switches).
-- See [Smart Switch Groups](smart_devices.md#smart-switch-groups).
-- See [Smart Alarms](smart_devices.md#smart-alarms).
-- See [Storage Monitors](smart_devices.md#storage-monitors).
+Pair Smart Switches, Smart Alarms, Smart Switch Groups, and Storage Monitors. Control from Discord buttons or in-game commands. See [smart_devices.md](smart_devices.md).
 
+**Smart Alarm event tags** — tag an alarm with an event name (e.g. `Large Excavator`) and the bot will announce both start AND stop of the powered event in the activity channel and team chat. Set via the **Edit** button on the alarm in the `alarms` channel.
 
-## Rust Server Information
-- See number of players, max capacity and queue size of the Rust Server.
-- See the In-Game time and time till day/night.
-- See how long ago wipe was.
-- See Map Size.
-- See Map Seed.
-- See Map Salt.
-- See Map Name.
-- F1 console connect information.
+## Trackers
 
-## In-Game Event Notifications
-> Receive notifications for In-Game Events such as:
-- **Cargo Ship** - When it spawns, despawns, how long before it enters egress stage. How long time since it was last out. step-trace.
-- **Patrol Helicopter** - When it spawns, despawns or gets taken down. How long time since it was last out and how long since it was taken down. step-trace.
-- **Oil Rig** - When Oil Rig calls in Heavy Scientists and how long till the Locked Crate unlocks.
-- **Chinook 47** - When it enters map and when it leaves.
-- **Vending Machines** - Whenever a new Vending Machine appears on the map.
+Battlemetrics-backed tracking of specific players. Each tracker shows:
 
-## Teammate Information
-> Get information about teammates such as Online/Offline/AFK/Alive/Dead/Location/Paired/Leader.
+- Plain player name plus small `B` and `S` markdown links to Battlemetrics and Steam profiles
+- Online / offline status with current-session duration
+- **Active-hours hint** per player (e.g. `~18–23 daily`) — computed from a local SQLite log of polling snapshots aggregated over 30 days
+- **Group active-window line** in the tracker embed showing roughly when the whole group plays
+- Per-tracker **RAID ALERT** toggle — fires `@everyone` in Discord and a force-message in team chat when ≥60% of the tracker is online during a quiet hour (30 min cooldown)
 
-## Other
-- Connect through different Rust Servers seemingly through the `servers` Text-Channel in Discord.
-- Easily access rustplusplus settings via the Discord Text-Channel `settings`.
-- Run In-Game commands either from In-Game teamchat or from Discord Text-Channel `commands`.
-- Communicate with teammates from In-Game to Discord and vice versa.
-- Get activity information in the `activity` Text-Channel on Discord. Information such as Smart Devices not reachable, Teammate connect/disconnect/leave/join/death, Smart Alarms notify when triggered, Server went offline/online, Map Wipe Detection, Storage Monitor Decay Notification, Tracker notifications etc...
-- Create Battlemetrics Trackers to track players or groups.
-- Get Facepunch news in Discord.
+## Cargo Ship Lifecycle
+
+Full state machine with toggleable Discord notifications for each transition:
+
+- Spawn → Docking → Docked → Undocking → Leaving → Despawn
+- Locked-crate spawn alerts (3 expected rounds)
+- 70-second "undocking soon" warning
+- Multi-harbor visit tracking
+- Direction-based "is leaving" fallback for maps without harbors
+
+In-game queries via `!cargo` and `!cargo timer`.
+
+## Other In-Game Event Notifications
+
+Patrol Helicopter (spawn / despawn / destroyed), Oil Rig heavy scientists and crate timers, Chinook 47, Traveling Vendor, Deep Sea event detection, and new-vending-machine markers.
+
+## Discord Text Channels
+
+- `information` — auto-updating server status, map, team summary
+- `servers` — paired servers (connect / disconnect / create tracker / etc.)
+- `settings` — toggle settings via buttons
+- `commands` — run in-game commands from Discord
+- `events` — automatic event notifications
+- `teamchat` — bidirectional bridge to in-game team chat
+- **`teamchat-translated`** — non-English/German player messages translated to English (opt-in toggle in settings)
+- `switches`, `switchgroups`, `alarms`, `storagemonitors` — smart device control
+- `activity` — connect/disconnect, smart-device unreachable, tracker events, raid alerts, wipe detection, etc.
+- `trackers` — Battlemetrics tracker embeds
+
+See [discord_text_channels.md](discord_text_channels.md).
+
+## Bot Internals
+
+- Smart switch on/off announcements bypass the in-game mute setting (same as Smart Alarms)
+- Battlemetrics request queue + 0–30s poll-cycle jitter to avoid API bursts
+- Steam profile name scraping throttled to once per 24 h per player
+- Day/night transition broadcasts (`It's getting dark!` / `It's getting light!`)
+- Battlemetrics upcoming wipes display in server embed
+- Alarm-triggered switch groups (auto-activate after N triggers)
+- Shorthand `!timer <time> [message]` (no `add` subcommand needed)
+- Asset-path monument tokens are no longer drawn over the map
+
+## What was removed in this fork
+
+These features exist in the upstream but were dropped here to slim the codebase:
+
+- RustLabs lookup commands (`/craft`, `/decay`, `/despawn`, `/recycle`, `/research`, `/stack`, `/upkeep`) and their ~21 MB of static data — use [rustlabs.com](https://rustlabs.com) directly
+- Vending-machine item-subscription system (`/market`, `!market sub`, etc.) — new-vending-machine markers still announce
+- CCTV codes (`/cctv`)
+- In-game `!tts` and the `sendTTSMessage` helper
+- Battlemetrics "all online players" widget in the info channel

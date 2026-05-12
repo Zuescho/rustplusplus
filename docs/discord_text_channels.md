@@ -8,6 +8,7 @@
 * [**Commands**](discord_text_channels.md#commands-channel)
 * [**Events**](discord_text_channels.md#events-channel)
 * [**Teamchat**](discord_text_channels.md#teamchat-channel)
+* [**Teamchat-Translated**](discord_text_channels.md#teamchat-translated-channel)
 * [**Switches**](discord_text_channels.md#switches-channel)
 * [**Switchgroups**](discord_text_channels.md#switch-groups-channel)
 * [**Alarms**](discord_text_channels.md#alarms-channel)
@@ -47,8 +48,6 @@
 
 ![Discord Text Channel Information](images/channels/information_channel.png)
 
-**Battlemetrics Online Players** shows all online players on the server.
-
 
 ## Servers Channel
 
@@ -64,7 +63,7 @@ There are a few buttons for each server. The `CONNECT` button lets you start a c
 
 ## Settings Channel
 
-> The Settings Channel contain a bunch of different settings for rustplusplus. There are settings for language, voice gender, command prefix, trademark visibility, allow in-game commands, mute in-game, in-game teammate notifications, command delay, Smart Alarm notifications, enable leader command, battlemetrics notifications, wipe detection, vending machine subscription and event notifications.
+> The Settings Channel exposes the bot's configuration as button-driven toggles. Notable settings include: command prefix, trademark visibility, allow in-game commands, mute in-game, Smart Alarm + Smart Switch in-game notifications, leader command, Battlemetrics notifications, wipe detection, **translate non-English/German team chat**, and the per-event notification toggles (Cargo Ship docking / docked / undocking / leaving / locked-crate spawn, Patrol Heli, Chinook, Oil Rig, Deep Sea, etc.).
 
 ![Discord Text Channel Settings](images/channels/settings_channel.png)
 
@@ -78,18 +77,14 @@ There are a few buttons for each server. The `CONNECT` button lets you start a c
 
 ## Events Channel
 
-> The Events Channel contains all the event notifications that occurs such as:
+> The Events Channel collects automatic event notifications:
 
-- `Cargoship spawn`
-- `Cargoship despawn`
-- `Cargoship enters egress stage`
-- `Patrol Helicopter spawn`
-- `Patrol Helicopter despawn`
-- `Patrol Helicopter destroyed`
-- `Locked Crate at Oil Rig Unlocked`
-- `Oil Rig have been triggered`
-- `Chinook 47 spawn`
-- `New Vending Machine detected`
+**Cargo Ship lifecycle:** spawn / located / docking / docked / undocking / undocking-soon (70s warning) / leaving (certain or "maybe") / leaves-map / despawn, plus locked-crate spawn alerts (3 expected rounds).
+**Patrol Helicopter:** spawn, despawn, destroyed.
+**Oil Rig:** locked-crate unlock countdown, heavy scientists called.
+**Other:** Chinook 47 spawn, Deep Sea event spawn/leave, new vending machine detected, Traveling Vendor.
+
+Each event type has its own setting in the Settings channel that controls whether notifications go to Discord, in-game, or both.
 
 ![Discord Text Channel Events](images/channels/events_channel.png)
 
@@ -99,6 +94,11 @@ There are a few buttons for each server. The `CONNECT` button lets you start a c
 > The Teamchat Channel makes it possible to communicate with your teammates In-Game. What you write in `teamchat` Channel appears In-Game and whatever you write In-Game appears in the `teamchat` Channel.
 
 ![Discord Text Channel Teamchat](images/channels/teamchat_channel.png)
+
+
+## Teamchat-Translated Channel
+
+> When the **Translate non-English/German team-chat messages** setting is enabled in the Settings channel, any player message that the bot detects as something other than English or German is translated to English and posted here. The original message is quoted below the translation. Detection uses an offline trigram model (franc-min); very short messages are skipped because they're unreliable to identify.
 
 
 ## Switches Channel
@@ -129,12 +129,23 @@ There are a few buttons for each server. The `CONNECT` button lets you start a c
 
 ## Trackers Channel
 
-> The Trackers Channel is used to keep track of players or groups on a specific server (Online/Offline/playtime/offlinetime). To create a tracker, just click on the `CREATE TRACKER` button located in the `servers` channel. The new tracker will appear in the trackers channel.
+> The Trackers Channel is used to keep track of players or groups on a specific server. Create a tracker via the `CREATE TRACKER` button in the `servers` channel.
 
-The Tracker embed displays a few things. The Title of the embed is the name of the Tracker. The Tracker embed also displays the Battlemetrics Id of the tracker, the Server ID, Server status, streamer mode on/off and potential Clan Tag setting. Under that, all players in the tracker are displayed. The `Names`, `Steam ID / Battlemetrics ID` and `Status` of every player.
-<br>
+The Tracker embed shows:
 
-By clicking the `ADD PLAYER` button, you can add a player to the tracker by providing the steamId or battlemetrics player id. By clicking the `REMOVE PLAYER` button, you can remove a player from the tracker by providing the steamId or battlemetrics player id. To make the tracker more accurate and make it easier to detect name changes, we recommend using steamID for the tracker. By clicking the `EDIT` button, you can change the `Name` of the tracker, the `Battlemetrics Id` of the tracker and the `Clan Tag` for all the players in the tracker. To remove the tracker, click the trashcan button. By clicking the `IN-GAME` button, you let the tracker notify in teamchat. By clicking the `@everyone` button, you decide if the @everyone tag should be used whenever a person connect/disconnect.
+- **Title** — tracker name; **Battlemetrics Id**, **Server Id**, server status, streamer mode, optional clan tag in the description.
+- **Group active line** in the description — when enough samples have been collected, shows the group's typical play window (e.g. `Group active: ~18–23 daily`).
+- **Per-player rows** — plain player name with small `B` and `S` markdown links to Battlemetrics and Steam profiles, plus the current online/offline status, current session time, and the player's individual active-hours hint when available.
+
+### Buttons
+
+- `ADD PLAYER` / `REMOVE PLAYER` — opens a modal that accepts a plain Steam/BM ID **or** a full Steam/Battlemetrics profile URL. For autocomplete-driven adding, use the `/tracker add` slash command instead.
+- `EDIT` — change tracker name, Battlemetrics Id, and clan tag.
+- `IN-GAME` toggle — also announce connect/disconnect events to in-game team chat.
+- `@everyone` toggle — ping `@everyone` on connect/disconnect.
+- **`RAID ALERT`** toggle — when ≥60% of the tracker is online during a quiet hour (determined from 30 days of polling history), fire `@everyone` in the activity channel and a force-message in team chat. 30-minute cooldown. Needs ~a week of polling data before it'll fire.
+- `UPDATE` — re-render the embed now.
+- 🗑️ — delete the tracker.
 
 ![CREATE TRACKER](images/channels/tracker_create.png)
 ![Discord Text Channel Trackers](images/channels/trackers_channel.png)
