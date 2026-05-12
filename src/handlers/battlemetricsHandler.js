@@ -23,6 +23,7 @@ const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const Scrape = require('../util/scrape.js');
 const ActivityDb = require('../util/activityDb.js');
+const PlayerSearch = require('../util/battlemetricsPlayerSearch.js');
 
 const ACTIVITY_RECOMPUTE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const STEAM_NAME_REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -60,20 +61,12 @@ module.exports = {
 
                 if (!bmInstance || !bmInstance.lastUpdateSuccessful) continue;
 
-                /* Self-heal: if a player was added via /tracker add while
-                   offline, their `name` may still equal the BM id. As soon as
-                   we see them in the BM roster with a real name, write it
-                   back to the instance file so the embed renders correctly. */
-                let nameFixed = false;
-                for (const player of content.players) {
-                    if (!player.playerId) continue;
-                    const bmPlayer = bmInstance.players[player.playerId];
-                    if (!bmPlayer || !bmPlayer.name) continue;
-                    if (player.name && player.name !== player.playerId) continue;
-                    player.name = (content.clanTag ? `${content.clanTag} ` : '') + bmPlayer.name;
-                    nameFixed = true;
+                /* Self-heal any player whose stored name is a placeholder
+                   (empty, '-', or just the BM id) as soon as the BM roster
+                   has a real name for them. */
+                if (module.exports.healTrackerPlayerNames(content, bmInstance)) {
+                    client.setInstance(guildId, instance);
                 }
-                if (nameFixed) client.setInstance(guildId, instance);
 
                 /* Snapshot every tracked player's current online state into
                    activity_log. This is the foundation for the typical-play-hours
@@ -525,5 +518,55 @@ module.exports = {
 
         client.log(client.intlGet(null, 'infoCap'),
             `Raid alert fired for tracker #${trackerId} (${onlineCount}/${totalCount} online)`);
+    },
+
+    /* True if the stored display name is just a placeholder we should replace
+       with whatever BM reports (empty/null, '-', or literally the BM id). */
+    _isPlaceholderName: function (player) {
+        if (!player.name) return true;
+        const n = String(player.name).trim();
+        if (n === '' || n === '-') return true;
+        if (player.playerId && n === String(player.playerId)) return true;
+        return false;
+    },
+
+    /**
+     * Sync-only heal: copy names from the live BM player cache onto any
+     * tracker entries currently storing a placeholder. Returns true if
+     * anything changed. Safe to call cheaply on every poll.
+     */
+    healTrackerPlayerNames: function (tracker, bmInstance) {
+        let changed = false;
+        for (const player of tracker.players) {
+            if (!module.exports._isPlaceholderName(player)) continue;
+            if (!player.playerId) continue;
+            const bmPlayer = bmInstance && bmInstance.players[player.playerId];
+            if (!bmPlayer || !bmPlayer.name) continue;
+            player.name = (tracker.clanTag ? `${tracker.clanTag} ` : '') + bmPlayer.name;
+            changed = true;
+        }
+        return changed;
+    },
+
+    /**
+     * On-demand heal used by the UPDATE button: first try the live BM cache
+     * (instant), then for any entries still unresolved fall back to a direct
+     * BM /players/{id} HTTP lookup so we don't have to wait for the player
+     * to come online and appear in the cache.
+     */
+    deepHealTrackerPlayerNames: async function (tracker, bmInstance) {
+        let changed = module.exports.healTrackerPlayerNames(tracker, bmInstance);
+
+        const pending = tracker.players.filter(p =>
+            p.playerId && module.exports._isPlaceholderName(p));
+        if (pending.length === 0) return changed;
+
+        for (const player of pending) {
+            const resolved = await PlayerSearch.resolveNameById(bmInstance, player.playerId);
+            if (!resolved) continue;
+            player.name = (tracker.clanTag ? `${tracker.clanTag} ` : '') + resolved;
+            changed = true;
+        }
+        return changed;
     },
 }

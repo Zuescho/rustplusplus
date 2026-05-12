@@ -26,6 +26,7 @@ const DiscordTools = require('../discordTools/discordTools.js');
 const SmartSwitchGroupHandler = require('./smartSwitchGroupHandler.js');
 const DiscordButtons = require('../discordTools/discordButtons.js');
 const DiscordModals = require('../discordTools/discordModals.js');
+const BattlemetricsHandler = require('./battlemetricsHandler.js');
 
 module.exports = async (client, interaction) => {
     const instance = client.getInstance(interaction.guildId);
@@ -1071,7 +1072,19 @@ module.exports = async (client, interaction) => {
             return;
         }
 
-        // TODO! Remove name change icon from status
+        /* Actively resolve any placeholder names ('-', empty, or just the
+           BM id) — hits the live BM cache first and falls back to a direct
+           BM /players/{id} lookup so the user doesn't have to wait for the
+           next poll cycle. */
+        try {
+            const bmInstance = client.battlemetricsInstances[tracker.battlemetricsId];
+            const changed = await BattlemetricsHandler.deepHealTrackerPlayerNames(tracker, bmInstance);
+            if (changed) client.setInstance(guildId, instance);
+        }
+        catch (e) {
+            client.log(client.intlGet(null, 'errorCap'),
+                `TrackerUpdate heal failed: ${e.message}`, 'error');
+        }
 
         await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId, interaction);
     }
