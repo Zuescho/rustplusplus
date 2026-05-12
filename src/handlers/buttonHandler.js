@@ -234,6 +234,25 @@ module.exports = async (client, interaction) => {
                 instance.generalSettings.smartSwitchNotifyInGameWhenChangedFromDiscord)]
         });
     }
+    else if (interaction.customId === 'TeamChatTranslateEnabled') {
+        instance.generalSettings.teamChatTranslateEnabled =
+            !instance.generalSettings.teamChatTranslateEnabled;
+        client.setInstance(guildId, instance);
+
+        if (rustplus) rustplus.generalSettings.teamChatTranslateEnabled =
+            instance.generalSettings.teamChatTranslateEnabled;
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `${instance.generalSettings.teamChatTranslateEnabled}`
+        }));
+
+        await client.interactionUpdate(interaction, {
+            components: [DiscordButtons.getTeamChatTranslateEnabledButton(
+                guildId,
+                instance.generalSettings.teamChatTranslateEnabled)]
+        });
+    }
     else if (interaction.customId === 'LeaderCommandEnabled') {
         instance.generalSettings.leaderCommandEnabled = !instance.generalSettings.leaderCommandEnabled;
         client.setInstance(guildId, instance);
@@ -283,42 +302,6 @@ module.exports = async (client, interaction) => {
 
         await client.interactionUpdate(interaction, {
             components: [DiscordButtons.getMapWipeNotifyEveryoneButton(instance.generalSettings.mapWipeNotifyEveryone)]
-        });
-    }
-    else if (interaction.customId === 'ItemAvailableNotifyInGame') {
-        instance.generalSettings.itemAvailableInVendingMachineNotifyInGame =
-            !instance.generalSettings.itemAvailableInVendingMachineNotifyInGame;
-        client.setInstance(guildId, instance);
-
-        if (rustplus) rustplus.generalSettings.itemAvailableInVendingMachineNotifyInGame =
-            instance.generalSettings.itemAvailableInVendingMachineNotifyInGame;
-
-        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
-            id: `${verifyId}`,
-            value: `${instance.generalSettings.itemAvailableInVendingMachineNotifyInGame}`
-        }));
-
-        await client.interactionUpdate(interaction, {
-            components: [DiscordButtons.getItemAvailableNotifyInGameButton(guildId,
-                instance.generalSettings.itemAvailableInVendingMachineNotifyInGame)]
-        });
-    }
-    else if (interaction.customId === 'DisplayInformationBattlemetricsAllOnlinePlayers') {
-        instance.generalSettings.displayInformationBattlemetricsAllOnlinePlayers =
-            !instance.generalSettings.displayInformationBattlemetricsAllOnlinePlayers;
-        client.setInstance(guildId, instance);
-
-        if (rustplus) rustplus.generalSettings.displayInformationBattlemetricsAllOnlinePlayers =
-            instance.generalSettings.displayInformationBattlemetricsAllOnlinePlayers;
-
-        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
-            id: `${verifyId}`,
-            value: `${instance.generalSettings.displayInformationBattlemetricsAllOnlinePlayers}`
-        }));
-
-        await client.interactionUpdate(interaction, {
-            components: [DiscordButtons.getDisplayInformationBattlemetricsAllOnlinePlayersButton(guildId,
-                instance.generalSettings.displayInformationBattlemetricsAllOnlinePlayers)]
         });
     }
     else if (interaction.customId === 'DisplayInformationBattlemetricsUpcomingWipes') {
@@ -548,6 +531,7 @@ module.exports = async (client, interaction) => {
             clanTag: '',
             everyone: false,
             inGame: true,
+            raidAlert: false,
             players: [],
             messageId: null
         }
@@ -699,7 +683,7 @@ module.exports = async (client, interaction) => {
                 status: status
             });
 
-            await rustplus.sendInGameMessage(str);
+            await rustplus.sendInGameMessage(str, true);
         }
 
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
@@ -971,7 +955,7 @@ module.exports = async (client, interaction) => {
                         status: status
                     });
 
-                    await rustplus.sendInGameMessage(str);
+                    await rustplus.sendInGameMessage(str, true);
                 }
 
                 client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
@@ -1163,6 +1147,25 @@ module.exports = async (client, interaction) => {
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
             id: `${verifyId}`,
             value: `${tracker.inGame}`
+        }));
+
+        await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId, interaction);
+    }
+    else if (interaction.customId.startsWith('TrackerRaidAlert')) {
+        const ids = JSON.parse(interaction.customId.replace('TrackerRaidAlert', ''));
+        const tracker = instance.trackers[ids.trackerId];
+
+        if (!tracker) {
+            await interaction.message.delete();
+            return;
+        }
+
+        tracker.raidAlert = !tracker.raidAlert;
+        client.setInstance(guildId, instance);
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `raidAlert=${tracker.raidAlert}`
         }));
 
         await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId, interaction);

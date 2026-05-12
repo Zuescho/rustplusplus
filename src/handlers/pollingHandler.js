@@ -28,7 +28,6 @@ const Team = require('../structures/Team');
 const TeamHandler = require('../handlers/teamHandler.js');
 const Time = require('../structures/Time');
 const TimeHandler = require('../handlers/timeHandler.js');
-const VendingMachines = require('../handlers/vendingMachineHandler.js');
 
 module.exports = {
     pollingHandler: async function (rustplus, client) {
@@ -59,7 +58,6 @@ module.exports = {
 
         await SmartSwitchHandler.handler(rustplus, client, time.time);
         TimeHandler.handler(rustplus, client, time.time);
-        await VendingMachines.handler(rustplus, client, mapMarkers.mapMarkers);
 
         /* Broadcast day/night transition messages at fixed in-game hours */
         if (!rustplus.isFirstPoll) {

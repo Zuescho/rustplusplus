@@ -269,6 +269,9 @@ module.exports = async (client, interaction) => {
         const smartAlarmName = interaction.fields.getTextInputValue('SmartAlarmName');
         const smartAlarmMessage = interaction.fields.getTextInputValue('SmartAlarmMessage');
         const smartAlarmCommand = interaction.fields.getTextInputValue('SmartAlarmCommand');
+        let smartAlarmEventTag = '';
+        try { smartAlarmEventTag = interaction.fields.getTextInputValue('SmartAlarmEventTag') || ''; }
+        catch { /* old modal payloads won't include this field */ }
 
         if (!server || (server && !server.alarms.hasOwnProperty(ids.entityId))) {
             interaction.deferUpdate();
@@ -277,6 +280,7 @@ module.exports = async (client, interaction) => {
 
         server.alarms[ids.entityId].name = smartAlarmName;
         server.alarms[ids.entityId].message = smartAlarmMessage;
+        server.alarms[ids.entityId].eventTag = smartAlarmEventTag.trim();
 
         if (smartAlarmCommand !== server.alarms[ids.entityId].command &&
             !Keywords.getListOfUsedKeywords(client, guildId, ids.serverId).includes(smartAlarmCommand)) {
@@ -286,7 +290,7 @@ module.exports = async (client, interaction) => {
 
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'modalValueChange', {
             id: `${verifyId}`,
-            value: `${smartAlarmName}, ${smartAlarmMessage}, ${server.alarms[ids.entityId].command}`
+            value: `${smartAlarmName}, ${smartAlarmMessage}, ${server.alarms[ids.entityId].command}, tag=${smartAlarmEventTag}`
         }));
 
         await DiscordMessages.sendSmartAlarmMessage(interaction.guildId, ids.serverId, ids.entityId);
@@ -434,7 +438,10 @@ module.exports = async (client, interaction) => {
         tracker.players.push({
             name: name,
             steamId: steamId,
-            playerId: playerId
+            playerId: playerId,
+            /* Stamp now so the periodic re-scrape skips this player until
+               STEAM_NAME_REFRESH_MS has elapsed. */
+            steamNameLastScrapedAt: steamId ? Date.now() : 0
         });
         client.setInstance(interaction.guildId, instance);
 

@@ -74,7 +74,13 @@ module.exports = {
 
         await client.updateBattlemetricsInstances();
         BattlemetricsHandler.handler(client, true);
-        client.battlemetricsIntervalId = setInterval(BattlemetricsHandler.handler, 60000, client, false);
+        /* Offset the recurring poll by a random fraction of the cycle so
+           multiple bot instances don't synchronize their bursts. */
+        const pollJitter = Math.floor(Math.random() * 30000);
+        setTimeout(() => {
+            client.battlemetricsIntervalId = setInterval(
+                BattlemetricsHandler.handler, 60000, client, false);
+        }, pollJitter);
 
         client.createRustplusInstancesFromConfig();
     },

@@ -139,6 +139,22 @@ module.exports = {
         return Math.sqrt(a * a + b * b);
     },
 
+    /* True when the path A→B→C is roughly the same heading. Used by the
+       cargo-ship lifecycle to decide that the ship is committed to leaving
+       the map rather than just looping. cosine ≥ 0.85 ≈ within ~32°. */
+    isSameDirection: function (pointA, pointB, pointC) {
+        if (!pointA || !pointB || !pointC) return false;
+        const abX = pointB.x - pointA.x;
+        const abY = pointB.y - pointA.y;
+        const bcX = pointC.x - pointB.x;
+        const bcY = pointC.y - pointB.y;
+        const abLength = Math.sqrt(abX * abX + abY * abY);
+        const bcLength = Math.sqrt(bcX * bcX + bcY * bcY);
+        if (abLength === 0 || bcLength === 0) return false;
+        const cosine = ((abX * bcX) + (abY * bcY)) / (abLength * bcLength);
+        return cosine >= 0.85;
+    },
+
     isOutsideGridSystem: function (x, y, mapSize, offset = 0) {
         return (x < -offset || x > (mapSize + offset) || y < -offset || y > (mapSize + offset));
     },

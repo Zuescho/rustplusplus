@@ -80,14 +80,6 @@ class RustPlus extends RustPlusLib {
         this.inGameChatQueue = [];
         this.inGameChatTimeout = null;
 
-        /* Stores found vending machine items that are subscribed to */
-        this.foundSubscriptionItems = { all: [], buy: [], sell: [] };
-        this.currentOrderList = [];  /* Stores the current order list from the market. */
-        this.currentOrderPage = 1;  /* Stores the current order page from the market. */
-
-        /* When a new item is added to subscription list, dont notify about the already available items. */
-        this.firstPollItems = { all: [], buy: [], sell: [] };
-
         this.allConnections = [];
         this.playerConnections = new Object();
         this.allDeaths = [];
@@ -708,43 +700,248 @@ class RustPlus extends RustPlusLib {
         });
     }
 
+    /* ============================================================
+       In-game !cargo command helpers (added in v1.27)
+       Slim port of FaiThiX 421aa27: keeps the default `!cargo` summary
+       and `!cargo timer`, drops the verbose `!cargo status` subcommand.
+       ============================================================ */
+
+    finalizeCargoCommandMessages(messages) {
+        if (!Array.isArray(messages)) return messages;
+        const filtered = messages.filter(m => typeof m === 'string' && m !== '');
+        if (filtered.length === 0) return null;
+        return filtered.length === 1 ? filtered[0] : filtered;
+    }
+
+    getCargoCommandActiveShips() {
+        if (!this.mapMarkers || !Array.isArray(this.mapMarkers.cargoShips)) return [];
+        return this.mapMarkers.cargoShips.filter(s => s?.location?.string);
+    }
+
+    getCargoCommandRemainingMsFromTimer(timer) {
+        if (!timer || typeof timer.getStateRunning !== 'function' || !timer.getStateRunning()) return null;
+        const ms = timer.getTimeLeft();
+        return Number.isFinite(ms) && ms > 0 ? ms : null;
+    }
+
+    getCargoCommandRemainingMsFromEndAt(endAtMs) {
+        const parsed = Number(endAtMs);
+        if (!Number.isFinite(parsed)) return null;
+        const ms = Math.floor(parsed - Date.now());
+        return ms > 0 ? ms : null;
+    }
+
+    getCargoCommandStatusText(cargoShip, cargoShipMeta) {
+        if (cargoShip?.onItsWayOut || cargoShipMeta?.isLeaving === true) {
+            return Client.client.intlGet(this.guildId, 'cargoInGameStatusLeaving');
+        }
+        switch (cargoShipMeta?.dockingStatus) {
+            case 'docking': return Client.client.intlGet(this.guildId, 'cargoInGameStatusDocking');
+            case 'docked': return Client.client.intlGet(this.guildId, 'cargoInGameStatusDocked');
+            case 'undocking': return Client.client.intlGet(this.guildId, 'cargoInGameStatusUndocking');
+            default: return Client.client.intlGet(this.guildId, 'cargoInGameStatusSailing');
+        }
+    }
+
+    getCargoCommandTimerEntries(id) {
+        if (!this.mapMarkers) return [];
+        const cargoShip = this.mapMarkers.getMarkerByTypeId(this.mapMarkers.types.CargoShip, id);
+        if (!cargoShip?.location?.string) return [];
+
+        const entries = [];
+        const push = (type, remainingMs) => {
+            if (!Number.isFinite(remainingMs) || remainingMs <= 0) return;
+            entries.push({ cargoShipId: id, location: cargoShip.location.string, remainingMs, type });
+        };
+
+        push('lockedCrate', this.getCargoCommandRemainingMsFromEndAt(
+            this.mapMarkers.cargoShipLockedCrateNextSpawnTimes?.[id]));
+        push('noLockedCratesLeft', this.getCargoCommandRemainingMsFromTimer(
+            this.mapMarkers.cargoShipEgressAfterHarbor1Timers?.[id]));
+        push('undockingSoon', this.getCargoCommandRemainingMsFromEndAt(
+            this.mapMarkers.cargoShipUndockingNotificationEndTimes?.[id]));
+        push('egress', this.getCargoCommandRemainingMsFromTimer(
+            this.mapMarkers.cargoShipEgressTimers?.[id]));
+        push('leavesMap', this.getCargoCommandRemainingMsFromTimer(
+            this.mapMarkers.cargoShipEgressAfterHarbor2Timers?.[id]));
+
+        entries.sort((a, b) => a.remainingMs - b.remainingMs);
+        return entries;
+    }
+
+    getCargoCommandPrimaryTimerEntry(id) {
+        const entries = this.getCargoCommandTimerEntries(id);
+        const priority = ['leavesMap', 'undockingSoon', 'lockedCrate', 'egress'];
+        for (const type of priority) {
+            const entry = entries.find(e => e.type === type);
+            if (entry) return entry;
+        }
+        return null;
+    }
+
+    getCargoCommandSummaryLine(cargoShip) {
+        const meta = this.mapMarkers.getCargoShipMetaData(cargoShip.id);
+        const status = this.getCargoCommandStatusText(cargoShip, meta);
+        const primary = this.getCargoCommandPrimaryTimerEntry(cargoShip.id);
+
+        if (!primary) {
+            return Client.client.intlGet(this.guildId, 'cargoInGameSummaryNoEta', {
+                location: cargoShip.location.string, status
+            });
+        }
+        const time = Timer.secondsToFullScale(primary.remainingMs / 1000);
+
+        switch (primary.type) {
+            case 'leavesMap':
+                return Client.client.intlGet(this.guildId,
+                    meta?.isDepartureCertain === false
+                        ? 'cargoInGameSummaryMayLeaveMap'
+                        : 'cargoInGameSummaryLeavesMap',
+                    { location: cargoShip.location.string, status, time });
+            case 'undockingSoon':
+                return Client.client.intlGet(this.guildId, 'cargoInGameSummaryUndockingSoon', {
+                    location: cargoShip.location.string, status, time
+                });
+            case 'lockedCrate':
+                return Client.client.intlGet(this.guildId, 'cargoInGameSummaryLockedCrate', {
+                    location: cargoShip.location.string, status, time
+                });
+            case 'egress':
+                return Client.client.intlGet(this.guildId, 'cargoInGameSummaryEgress', {
+                    location: cargoShip.location.string, status, time
+                });
+            default:
+                return Client.client.intlGet(this.guildId, 'cargoInGameSummaryNoEta', {
+                    location: cargoShip.location.string, status
+                });
+        }
+    }
+
+    getCargoCommandTimerText(entry) {
+        const args = {
+            location: entry.location,
+            time: Timer.secondsToFullScale(entry.remainingMs / 1000)
+        };
+        switch (entry.type) {
+            case 'lockedCrate': return Client.client.intlGet(this.guildId, 'cargoInGameTimerLockedCrate', args);
+            case 'noLockedCratesLeft': return Client.client.intlGet(this.guildId, 'cargoInGameTimerNoLockedCratesLeft', args);
+            case 'undockingSoon': return Client.client.intlGet(this.guildId, 'cargoInGameTimerUndockingSoon', args);
+            case 'egress': return Client.client.intlGet(this.guildId, 'cargoInGameTimerEgress', args);
+            case 'leavesMap': return Client.client.intlGet(this.guildId, 'cargoInGameTimerLeavesMap', args);
+            default: return null;
+        }
+    }
+
+    getInGameCargoSummary() {
+        const ships = this.getCargoCommandActiveShips();
+        if (ships.length === 0) return this.getCommandCargo();
+        return this.finalizeCargoCommandMessages(
+            ships.map(s => this.getCargoCommandSummaryLine(s)));
+    }
+
+    getInGameCargoTimers() {
+        const ships = this.getCargoCommandActiveShips();
+        if (ships.length === 0) return this.getCommandCargo();
+        const entries = [];
+        for (const s of ships) entries.push(...this.getCargoCommandTimerEntries(s.id));
+        if (entries.length === 0) return this.getInGameCargoSummary();
+        entries.sort((a, b) => a.remainingMs - b.remainingMs);
+        return this.finalizeCargoCommandMessages(entries.map(e => this.getCargoCommandTimerText(e)));
+    }
+
+    getInGameCommandCargo(command) {
+        const prefix = this.generalSettings.prefix;
+        const cmd = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxCargo')}`.toLowerCase();
+        const cmdEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxCargo')}`.toLowerCase();
+        const timer = `${Client.client.intlGet(this.guildId, 'commandSyntaxTimer')}`.toLowerCase();
+        const timerEn = `${Client.client.intlGet('en', 'commandSyntaxTimer')}`.toLowerCase();
+
+        let rest = command.toLowerCase().trim();
+        if (rest.startsWith(`${cmd} `)) rest = rest.slice(cmd.length + 1).trim();
+        else if (rest === cmd) rest = '';
+        else if (rest.startsWith(`${cmdEn} `)) rest = rest.slice(cmdEn.length + 1).trim();
+        else if (rest === cmdEn) rest = '';
+        else return this.getCommandCargo();
+
+        if (rest === '') return this.getInGameCargoSummary();
+
+        const sub = rest.replace(/ .*/, '');
+        if (sub === timer || sub === timerEn) return this.getInGameCargoTimers();
+        /* Any other subcommand (including the upstream `status`) falls back
+           to the default summary so users typing the old wording still get a useful reply. */
+        return this.getInGameCargoSummary();
+    }
+
     getCommandCargo(isInfoChannel = false) {
         const strings = [];
-        let unhandled = this.mapMarkers.cargoShips.map(e => e.id);
+        const handled = new Set();
+        /* Prefer the post-harbor timers (these fire when we know the ship has
+           already finished its harbor rounds and is about to head off-map). */
+        const pushCargoTimerString = (timerCollection, infoTextId, textId) => {
+            for (const [id, timer] of Object.entries(timerCollection)) {
+                const cargoShip = this.mapMarkers.getMarkerByTypeId(this.mapMarkers.types.CargoShip, parseInt(id));
+                if (!cargoShip) continue;
+                const time = Timer.getTimeLeftOfTimer(timer);
+                if (!time) continue;
+
+                handled.add(parseInt(id));
+                if (isInfoChannel) {
+                    return Client.client.intlGet(this.guildId, infoTextId, {
+                        time: Timer.getTimeLeftOfTimer(timer, 's'),
+                        location: cargoShip.location.string
+                    });
+                }
+                strings.push(Client.client.intlGet(this.guildId, textId, {
+                    time: time, location: cargoShip.location.string
+                }));
+            }
+            return null;
+        };
+
+        const afterHarbor1Info = pushCargoTimerString(
+            this.mapMarkers.cargoShipEgressAfterHarbor1Timers,
+            'cargoLeavesInTime', 'timeBeforeCargoLeavesMap');
+        if (afterHarbor1Info !== null) return afterHarbor1Info;
+
+        const afterHarbor2Info = pushCargoTimerString(
+            this.mapMarkers.cargoShipEgressAfterHarbor2Timers,
+            'cargoLeavesInTime', 'timeBeforeCargoLeavesMap');
+        if (afterHarbor2Info !== null) return afterHarbor2Info;
+
         for (const [id, timer] of Object.entries(this.mapMarkers.cargoShipEgressTimers)) {
+            if (handled.has(parseInt(id))) continue;
             const cargoShip = this.mapMarkers.getMarkerByTypeId(this.mapMarkers.types.CargoShip, parseInt(id));
+            if (!cargoShip) continue;
             const time = Timer.getTimeLeftOfTimer(timer);
             if (time) {
+                handled.add(parseInt(id));
                 if (isInfoChannel) {
                     return Client.client.intlGet(this.guildId, 'egressInTime', {
                         time: Timer.getTimeLeftOfTimer(timer, 's'),
                         location: cargoShip.location.string
                     });
                 }
-                else {
-                    strings.push(Client.client.intlGet(this.guildId, 'timeBeforeCargoEntersEgress', {
-                        time: time,
-                        location: cargoShip.location.string
-                    }));
-                }
+                strings.push(Client.client.intlGet(this.guildId, 'timeBeforeCargoEntersEgress', {
+                    time: time, location: cargoShip.location.string
+                }));
             }
-            unhandled = unhandled.filter(e => e != parseInt(id));
         }
+
+        let unhandled = this.mapMarkers.cargoShips.map(e => e.id).filter(id => !handled.has(id));
 
         if (unhandled.length > 0) {
             for (const id of unhandled) {
                 const cargoShip = this.mapMarkers.getMarkerByTypeId(this.mapMarkers.types.CargoShip, id);
-                if (cargoShip.onItsWayOut) {
+                const cargoShipMeta = this.mapMarkers.cargoShipMetaData[id];
+                if (cargoShip.onItsWayOut || cargoShipMeta?.isLeaving === true) {
                     if (isInfoChannel) {
                         return Client.client.intlGet(this.guildId, 'leavingMapAt', {
                             location: cargoShip.location.string
                         });
                     }
-                    else {
-                        strings.push(Client.client.intlGet(this.guildId, 'cargoLeavingMapAt', {
-                            location: cargoShip.location.string
-                        }));
-                    }
+                    strings.push(Client.client.intlGet(this.guildId, 'cargoLeavingMapAt', {
+                        location: cargoShip.location.string
+                    }));
                 }
                 else {
                     if (isInfoChannel) {
@@ -752,11 +949,9 @@ class RustPlus extends RustPlusLib {
                             location: cargoShip.location.string
                         });
                     }
-                    else {
-                        strings.push(Client.client.intlGet(this.guildId, 'cargoLocatedAt', {
-                            location: cargoShip.location.string
-                        }));
-                    }
+                    strings.push(Client.client.intlGet(this.guildId, 'cargoLocatedAt', {
+                        location: cargoShip.location.string
+                    }));
                 }
             }
         }
@@ -906,72 +1101,6 @@ class RustPlus extends RustPlusLib {
         return null;
     }
 
-    getCommandCraft(command) {
-        const prefix = this.generalSettings.prefix;
-        const commandCraft = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxCraft')}`;
-        const commandCraftEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxCraft')}`;
-
-        if (command.toLowerCase().startsWith(`${commandCraft} `)) {
-            command = command.slice(`${commandCraft} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandCraftEn} `.length).trim();
-        }
-
-        const words = command.split(' ');
-        const lastWord = words[words.length - 1];
-        const lastWordLength = lastWord.length;
-        const restString = command.slice(0, -(lastWordLength)).trim();
-
-        let itemSearchName = null, itemSearchQuantity = null;
-        if (isNaN(lastWord)) {
-            itemSearchName = command;
-            itemSearchQuantity = 1;
-        }
-        else {
-            itemSearchName = restString;
-            itemSearchQuantity = parseInt(lastWord);
-        }
-
-        const item = Client.client.items.getClosestItemIdByName(itemSearchName)
-        if (item === null || itemSearchName === '') {
-            const str = Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                name: itemSearchName
-            });
-            return str;
-        }
-
-        const itemId = item;
-        const itemName = Client.client.items.getName(itemId);
-        const quantity = itemSearchQuantity;
-
-        const craftDetails = Client.client.rustlabs.getCraftDetailsById(itemId);
-        if (craftDetails === null) {
-            const str = Client.client.intlGet(this.guildId, 'couldNotFindCraftDetails', {
-                name: itemName
-            });
-            return str;
-        }
-
-        let str = `${itemName} `;
-        if (quantity === 1) {
-            str += `(${craftDetails[2].timeString}): `;
-        }
-        else {
-            const time = Timer.secondsToFullScale(craftDetails[2].time * quantity, '', true);
-            str += `x${quantity} (${time}): `;
-        }
-
-        for (const ingredient of craftDetails[2].ingredients) {
-            const ingredientName = Client.client.items.getName(ingredient.id);
-            str += `${ingredientName} x${ingredient.quantity * quantity}, `;
-        }
-
-        str = str.slice(0, -2);
-
-        return str;
-    }
-
     async getCommandDeath(command, callerSteamId) {
         const prefix = this.generalSettings.prefix;
         const commandDeath = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxDeath')}`;
@@ -1080,193 +1209,6 @@ class RustPlus extends RustPlusLib {
 
         return Client.client.intlGet(this.guildId, 'couldNotIdentifyMember', {
             name: name
-        });
-    }
-
-    getCommandDecay(command) {
-        const prefix = this.generalSettings.prefix;
-        const commandDecay = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxDecay')}`;
-        const commandDecayEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxDecay')}`;
-
-        if (command.toLowerCase().startsWith(`${commandDecay} `)) {
-            command = command.slice(`${commandDecay} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandDecayEn} `.length).trim();
-        }
-
-        const words = command.split(' ');
-        const lastWord = words[words.length - 1];
-        const lastWordLength = lastWord.length;
-        const restString = command.slice(0, -(lastWordLength)).trim();
-
-        let decayItemName = null, decayItemHp = null;
-        if (isNaN(lastWord)) {
-            decayItemName = command;
-        }
-        else {
-            decayItemName = restString;
-            decayItemHp = parseInt(lastWord);
-        }
-
-        let itemId = null;
-        let type = 'items';
-
-        let foundName = null;
-        if (!foundName) {
-            foundName = Client.client.rustlabs.getClosestOtherNameByName(decayItemName);
-            if (foundName) {
-                if (Client.client.rustlabs.decayData['other'].hasOwnProperty(foundName)) {
-                    type = 'other';
-                }
-                else {
-                    foundName = null;
-                }
-            }
-        }
-
-        if (!foundName) {
-            foundName = Client.client.rustlabs.getClosestBuildingBlockNameByName(decayItemName);
-            if (foundName) {
-                if (Client.client.rustlabs.decayData['buildingBlocks'].hasOwnProperty(foundName)) {
-                    type = 'buildingBlocks';
-                }
-                else {
-                    foundName = null;
-                }
-            }
-        }
-
-        if (!foundName) {
-            foundName = Client.client.items.getClosestItemIdByName(decayItemName);
-            if (foundName) {
-                if (!Client.client.rustlabs.decayData['items'].hasOwnProperty(foundName)) {
-                    foundName = null;
-                }
-            }
-        }
-
-        if (!foundName) {
-            const str = Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                name: decayItemName
-            });
-            return str;
-        }
-        itemId = foundName;
-
-        let itemName = null;
-        let decayDetails = null;
-        if (type === 'items') {
-            itemName = Client.client.items.getName(itemId);
-            decayDetails = Client.client.rustlabs.getDecayDetailsById(itemId);
-        }
-        else {
-            itemName = itemId;
-            decayDetails = Client.client.rustlabs.getDecayDetailsByName(itemId);
-        }
-
-        if (decayDetails === null) {
-            const str = Client.client.intlGet(this.guildId, 'couldNotFindDecayDetails', {
-                name: itemName
-            });
-            return str;
-        }
-
-        const details = decayDetails[3];
-
-        const hp = decayItemHp === null ? details.hp : decayItemHp;
-        if (hp > details.hp) {
-            const str = client.intlGet(this.guildId, 'hpExceedMax', {
-                hp: hp,
-                max: details.hp
-            });
-            return str;
-        }
-
-        const decayMultiplier = hp / details.hp;
-
-        let decayString = `${itemName} (${hp}/${details.hp}) `;
-        const decayStrings = [];
-        if (details.decayString !== null) {
-            let str = `${Client.client.intlGet(this.guildId, 'decay')}: `;
-            if (hp === details.hp) {
-                decayStrings.push(`${str}${details.decayString}`);
-            }
-            else {
-                const time = Timer.secondsToFullScale(Math.floor(details.decay * decayMultiplier));
-                decayStrings.push(`${str}${time}`);
-            }
-        }
-
-        if (details.decayOutsideString !== null) {
-            let str = `${Client.client.intlGet(this.guildId, 'outside')}: `;
-            if (hp === details.hp) {
-                decayStrings.push(`${str}${details.decayOutsideString}`);
-            }
-            else {
-                const time = Timer.secondsToFullScale(Math.floor(details.decayOutside * decayMultiplier));
-                decayStrings.push(`${str}${time}`);
-            }
-        }
-
-        if (details.decayInsideString !== null) {
-            let str = `${Client.client.intlGet(this.guildId, 'inside')}: `;
-            if (hp === details.hp) {
-                decayStrings.push(`${str}${details.decayInsideString}`);
-            }
-            else {
-                const time = Timer.secondsToFullScale(Math.floor(details.decayInside * decayMultiplier));
-                decayStrings.push(`${str}${time}`);
-            }
-        }
-
-        if (details.decayUnderwaterString !== null) {
-            let str = `${Client.client.intlGet(this.guildId, 'underwater')}: `;
-            if (hp === details.hp) {
-                decayStrings.push(`${str}${details.decayUnderwaterString}`);
-            }
-            else {
-                const time = Timer.secondsToFullScale(Math.floor(details.decayUnderwater * decayMultiplier));
-                decayStrings.push(`${str}${time}`);
-            }
-        }
-        decayString += `${decayStrings.join(', ')}.`;
-
-        return decayString;
-    }
-
-    getCommandDespawn(command) {
-        const prefix = this.generalSettings.prefix;
-        const commandDespawn = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxDespawn')}`;
-        const commandDespawnEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxDespawn')}`;
-
-        if (command.toLowerCase().startsWith(`${commandDespawn} `)) {
-            command = command.slice(`${commandDespawn} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandDespawnEn} `.length).trim();
-        }
-
-        const itemId = Client.client.items.getClosestItemIdByName(command);
-        if (itemId === null) {
-            return Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                name: command
-            });
-        }
-
-        const itemName = Client.client.items.getName(itemId);
-        const despawnDetails = Client.client.rustlabs.getDespawnDetailsById(itemId);
-        if (despawnDetails === null) {
-            return Client.client.intlGet(this.guildId, 'couldNotFindDespawnDetails', {
-                name: itemName
-            });
-        }
-
-        const despawnTime = despawnDetails[2].timeString;
-
-        return Client.client.intlGet(this.guildId, 'despawnTimeOfItem', {
-            item: itemName,
-            time: despawnTime
         });
     }
 
@@ -1699,293 +1641,6 @@ class RustPlus extends RustPlusLib {
         return null;
     }
 
-    getCommandMarket(command) {
-        const instance = Client.client.getInstance(this.guildId);
-        const prefix = this.generalSettings.prefix;
-        const commandMarket = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxMarket')}`;
-        const commandMarketEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxMarket')}`;
-        const commandNext = `${Client.client.intlGet(this.guildId, 'commandSyntaxNext')}`;
-        const commandNextEn = `${Client.client.intlGet('en', 'commandSyntaxNext')}`;
-        const commandSearch = `${Client.client.intlGet(this.guildId, 'commandSyntaxSearch')}`;
-        const commandSearchEn = `${Client.client.intlGet('en', 'commandSyntaxSearch')}`;
-        const commandSub = `${Client.client.intlGet(this.guildId, 'commandSyntaxSubscribe')}`;
-        const commandSubEn = `${Client.client.intlGet('en', 'commandSyntaxSubscribe')}`;
-        const commandUnsub = `${Client.client.intlGet(this.guildId, 'commandSyntaxUnsubscribe')}`;
-        const commandUnsubEn = `${Client.client.intlGet('en', 'commandSyntaxUnsubscribe')}`;
-        const commandList = `${Client.client.intlGet(this.guildId, 'commandSyntaxList')}`;
-        const commandListEn = `${Client.client.intlGet('en', 'commandSyntaxList')}`;
-
-        //Remove market part of the command -> search sell itemname
-        if (command.toLowerCase().startsWith(`${commandMarket} `)) {
-            command = command.slice(`${commandMarket} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandMarketEn} `.length).trim();
-        }
-        //Get subcommand and remove it from the command -> sell itemname
-        const subcommand = command.replace(/ .*/, '');
-        command = command.slice(subcommand.length + 1);
-
-        //Get ordertype from the command -> ordertype
-        const orderType = command.replace(/ .*/, '');
-        let remainingCommand = command.slice(orderType.length + 1);
-        
-        let showImages = false;
-        let name = '';
-
-        //Check if images should be shown and get the item name -> itemname
-        if (remainingCommand.toLowerCase().startsWith('image ')) {
-            showImages = true;
-            name = remainingCommand.slice('image '.length).trim();
-            } 
-        else {
-            name = remainingCommand.trim();
-            }
-
-        const ORDERS_PER_PAGE = 10;
-        const orders = [];
-        let foundOrders = 0;
-        switch (subcommand) {
-            case commandSearchEn:
-            case commandSearch: {
-                if (!['all', 'buy', 'sell'].includes(orderType)) {
-                    return Client.client.intlGet(this.guildId, 'notAValidOrderType', {
-                        order: orderType
-                    });
-                }
-
-                const itemId = Client.client.items.getClosestItemIdByName(name);
-                if (itemId === null) {
-                    return Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                        name: name
-                    });
-                }
-
-                
-                for (const vendingMachine of this.mapMarkers.vendingMachines) {
-                    if (!vendingMachine.hasOwnProperty('sellOrders')) continue;
-
-                    for (const order of vendingMachine.sellOrders) {
-                        if (order.amountInStock === 0) continue;
-
-                        const orderItemId =
-                            (Object.keys(Client.client.items.items).includes(order.itemId.toString())) ?
-                                order.itemId : null;
-                        const orderCurrencyId =
-                            (Object.keys(Client.client.items.items).includes(order.currencyId.toString())) ?
-                                order.currencyId : null;
-
-                        if ((orderType === 'all' &&
-                            (orderItemId === parseInt(itemId) || orderCurrencyId === parseInt(itemId))) ||
-                            (orderType === 'buy' && orderCurrencyId === parseInt(itemId)) ||
-                            (orderType === 'sell' && orderItemId === parseInt(itemId))) {
-                                orders.push({
-                                    text: `${Client.client.intlGet(this.guildId, 'foundItemInVendingMachine', {
-                                        item: (showImages) ? `:${Client.client.items.getShortName(order.itemId)}:` : ` ${Client.client.items.getName(order.itemId)}`,
-                                        quantity: order.quantity,
-                                        price: (showImages) ? `:${Client.client.items.getShortName(order.currencyId)}:` : ` ${Client.client.items.getName(order.currencyId)}`,
-                                        priceAmount: order.costPerItem,
-                                        stock: order.amountInStock,
-                                        location: vendingMachine.location.string
-                                    })}`
-                                }
-                            );
-                            }
-                    }
-                }
-
-                if (orders.length === 0) {
-                    delete this.currentOrdersList;
-                    delete this.currentOrderPage;
-                    return Client.client.intlGet(this.guildId, 'noItemFound');
-                }
-                
-                foundOrders = orders.length;
-                const totalPages = Math.ceil(foundOrders / ORDERS_PER_PAGE);
-                
-                this.currentOrdersList = orders;
-                this.currentOrderPage = 1;
-                
-                const firstPageOrders = orders.slice(0, ORDERS_PER_PAGE);
-                
-                if( totalPages > 1) {
-                    this.sendInGameMessage(
-                    Client.client.intlGet(this.guildId, 'foundOrdersSummary', {
-                        foundOrders: foundOrders,
-                        currentPage: 1,
-                        totalPages: totalPages,
-                        nextCommand: `${prefix}market next`
-                    }));
-                }
-                if (totalPages === 1) {
-                    this.sendInGameMessage(
-                    Client.client.intlGet(this.guildId, 'foundOrdersSummaryNoNext', {
-                        foundOrders: foundOrders
-                    }));
-                }
-                
-                for (let i = 0; i < firstPageOrders.length; i++) {
-                    const order = firstPageOrders[i];
-                    
-                    const delay = i * 150; 
-
-                    setTimeout(() => {
-                        this.sendInGameMessage(order.text); 
-                    }, delay);
-                }
-
-                return null;
-            } break;
-
-            case commandNextEn:
-            case commandNext: {
-                const orders = this.currentOrdersList;
-                let currentPage = this.currentOrderPage || 0;
-
-                if (!Array.isArray(orders) || orders.length === 0 || currentPage === 0) {
-                    delete this.currentOrdersList;
-                    delete this.currentOrderPage;
-                    return Client.client.intlGet(this.guildId, 'noMorePages');
-                }
-
-                const totalPages = Math.ceil(orders.length / ORDERS_PER_PAGE);
-
-                if (currentPage >= totalPages) {
-                    delete this.currentOrdersList;
-                    delete this.currentOrderPage;
-                    return Client.client.intlGet(this.guildId, 'noMorePages');
-                }
-
-                currentPage += 1;
-                this.currentOrderPage = currentPage;
-
-                const startIndex = (currentPage - 1) * ORDERS_PER_PAGE;
-                const endIndex = startIndex + ORDERS_PER_PAGE;
-                const nextPageOrders = orders.slice(startIndex, endIndex);
-
-                this.sendInGameMessage(
-                    Client.client.intlGet(this.guildId, 'foundOrdersSummary', {
-                        foundOrders: orders.length,
-                        currentPage: currentPage,
-                        totalPages: totalPages,
-                        nextCommand: (currentPage < totalPages) ? 'market next' : ''
-                    })
-                );
-
-                for (let i = 0; i < nextPageOrders.length; i++) {
-                    const order = nextPageOrders[i];
-                    
-                    const delay = i * 150; 
-
-                    setTimeout(() => {
-                        this.sendInGameMessage(order.text); 
-                    }, delay);
-                }
-                
-                if (currentPage >= totalPages) {
-                    delete this.currentOrdersList;
-                    delete this.currentOrderPage;
-                }
-
-                return null; 
-            } break;
-
-            case commandSubEn:
-            case commandSub: {
-                if (!['all', 'buy', 'sell'].includes(orderType)) {
-                    return Client.client.intlGet(this.guildId, 'notAValidOrderType', {
-                        order: orderType
-                    });
-                }
-
-                const itemId = Client.client.items.getClosestItemIdByName(name);
-                if (itemId === null) {
-                    return Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                        name: name
-                    });
-                }
-                const itemName = Client.client.items.getName(itemId);
-
-
-                if (instance.marketSubscriptionList[orderType].includes(itemId)) {
-                    return Client.client.intlGet(this.guildId, 'alreadySubscribedToItem', {
-                        name: itemName
-                    });
-                }
-                else {
-                    instance.marketSubscriptionList[orderType].push(itemId);
-                    this.firstPollItems[orderType].push(itemId);
-                    Client.client.setInstance(this.guildId, instance);
-
-                    return Client.client.intlGet(this.guildId, 'justSubscribedToItem', {
-                        name: itemName
-                    });
-                }
-            } break;
-
-            case commandUnsubEn:
-            case commandUnsub: {
-                if (!['all', 'buy', 'sell'].includes(orderType)) {
-                    return Client.client.intlGet(this.guildId, 'notAValidOrderType', {
-                        order: orderType
-                    });
-                }
-
-                const itemId = Client.client.items.getClosestItemIdByName(name);
-                if (itemId === null) {
-                    return Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                        name: name
-                    });
-                }
-                const itemName = Client.client.items.getName(itemId);
-
-                if (instance.marketSubscriptionList[orderType].includes(itemId)) {
-                    instance.marketSubscriptionList[orderType] =
-                        instance.marketSubscriptionList[orderType].filter(e => e !== itemId);
-                    Client.client.setInstance(this.guildId, instance);
-
-                    return Client.client.intlGet(this.guildId, 'removedSubscribeItem', {
-                        name: itemName
-                    });
-                }
-                else {
-                    return Client.client.intlGet(this.guildId, 'notExistInSubscription', {
-                        name: itemName
-                    });
-                }
-            } break;
-
-            case commandListEn:
-            case commandList: {
-                const names = { all: '', buy: '', sell: '' };
-                for (const [ot, itemIds] of Object.entries(instance.marketSubscriptionList)) {
-                    let counter = 0;
-                    for (const itemId of itemIds) {
-                        if (counter === 0) names[ot] += `${Client.client.intlGet(this.guildId, ot)}: `;
-                        names[ot] += `${Client.client.items.getName(itemId)} (${itemId}), `;
-                        counter += 1;
-                    }
-                    if (counter !== 0) names[ot] = names[ot].slice(0, -2);
-                }
-
-                if (names.all === '' && names.buy === '' && names.sell === '') {
-                    return Client.client.intlGet(this.guildId, 'subscriptionListEmpty');
-                }
-
-                let str = '';
-                for (const [ot, otString] of Object.entries(names)) {
-                    str += otString;
-                }
-
-                return str;
-            } break;
-
-            default: {
-                return null;
-            } break;
-        }
-    }
-
     getCommandMute() {
         const instance = Client.client.getInstance(this.guildId);
         instance.generalSettings.muteInGameBotMessages = true;
@@ -2275,117 +1930,6 @@ class RustPlus extends RustPlusLib {
         });
     }
 
-    getCommandRecycle(command) {
-        const prefix = this.generalSettings.prefix;
-        const commandRecycle = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxRecycle')}`;
-        const commandRecycleEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxRecycle')}`;
-
-        if (command.toLowerCase().startsWith(`${commandRecycle} `)) {
-            command = command.slice(`${commandRecycle} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandRecycleEn} `.length).trim();
-        }
-
-        const words = command.split(' ');
-        const lastWord = words[words.length - 1];
-        const lastWordLength = lastWord.length;
-        const restString = command.slice(0, -(lastWordLength)).trim();
-
-        let itemSearchName = null, itemSearchQuantity = null;
-        if (isNaN(lastWord)) {
-            itemSearchName = command;
-            itemSearchQuantity = 1;
-        }
-        else {
-            itemSearchName = restString;
-            itemSearchQuantity = parseInt(lastWord);
-        }
-
-        const item = Client.client.items.getClosestItemIdByName(itemSearchName)
-        if (item === null || itemSearchName === '') {
-            const str = Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                name: itemSearchName
-            });
-            return str;
-        }
-
-        const itemId = item;
-        const itemName = Client.client.items.getName(itemId);
-        const quantity = itemSearchQuantity;
-
-        const recycleDetails = Client.client.rustlabs.getRecycleDetailsById(itemId);
-        if (recycleDetails === null) {
-            const str = Client.client.intlGet(this.guildId, 'couldNotFindRecycleDetails', {
-                name: itemName
-            });
-            return str;
-        }
-
-        const recycleData = Client.client.rustlabs.getRecycleDataFromArray([
-            { itemId: recycleDetails[0], quantity: quantity, itemIsBlueprint: false }
-        ]);
-
-        let str = `${itemName}: `;
-        for (const item of recycleData['recycler']) {
-            str += `${Client.client.items.getName(item.itemId)} x${item.quantity}, `;
-        }
-        str = str.slice(0, -2);
-
-        return str;
-    }
-
-    getCommandResearch(command) {
-        const prefix = this.generalSettings.prefix;
-        const commandResearch = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxResearch')}`;
-        const commandResearchEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxResearch')}`;
-
-        if (command.toLowerCase().startsWith(`${commandResearch} `)) {
-            command = command.slice(`${commandResearch} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandResearchEn} `.length).trim();
-        }
-        const itemResearchName = command;
-
-        const item = Client.client.items.getClosestItemIdByName(itemResearchName)
-        if (item === null || itemResearchName === '') {
-            const str = Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                name: itemResearchName
-            });
-            return str;
-        }
-
-        const itemId = item;
-        const itemName = Client.client.items.getName(itemId);
-
-        const researchDetails = Client.client.rustlabs.getResearchDetailsById(itemId);
-        if (researchDetails === null) {
-            const str = Client.client.intlGet(this.guildId, 'couldNotFindResearchDetails', {
-                name: itemName
-            });
-            return str;
-        }
-
-
-
-        let str = `${itemName}: `;
-        if (researchDetails[2].researchTable !== null) {
-            const researchTable = `${Client.client.intlGet(this.guildId, 'researchTable')}`;
-            const scrap = `${researchDetails[2].researchTable}`;
-            str += `${researchTable} (${scrap})`
-        }
-        if (researchDetails[2].workbench !== null) {
-            const type = `${Client.client.items.getName(researchDetails[2].workbench.type)}`;
-            const scrap = researchDetails[2].workbench.scrap;
-            const totalScrap = researchDetails[2].workbench.totalScrap;
-            str += `, ${type} (${scrap} (${totalScrap}))`;
-        }
-        str += '.';
-
-        return str;
-    }
-
     async getCommandSend(command, callerName) {
         const credentials = InstanceUtils.readCredentialsFile(this.guildId);
         const prefix = this.generalSettings.prefix;
@@ -2477,41 +2021,6 @@ class RustPlus extends RustPlusLib {
         }
 
         return strings;
-    }
-
-    getCommandStack(command) {
-        const prefix = this.generalSettings.prefix;
-        const commandStack = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxStack')}`;
-        const commandStackEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxStack')}`;
-
-        if (command.toLowerCase().startsWith(`${commandStack} `)) {
-            command = command.slice(`${commandStack} `.length).trim();
-        }
-        else {
-            command = command.slice(`${commandStackEn} `.length).trim();
-        }
-
-        const itemId = Client.client.items.getClosestItemIdByName(command);
-        if (itemId === null) {
-            return Client.client.intlGet(this.guildId, 'noItemWithNameFound', {
-                name: command
-            });
-        }
-
-        const itemName = Client.client.items.getName(itemId);
-        const stackDetails = Client.client.rustlabs.getStackDetailsById(itemId);
-        if (stackDetails === null) {
-            return Client.client.intlGet(this.guildId, 'couldNotFindStackDetails', {
-                name: itemName
-            });
-        }
-
-        const quantity = stackDetails[2].quantity;
-
-        return Client.client.intlGet(this.guildId, 'stackSizeOfItem', {
-            item: itemName,
-            quantity: quantity
-        });
     }
 
     getCommandSteamId(command, callerSteamId, callerName) {
@@ -2777,23 +2286,6 @@ class RustPlus extends RustPlusLib {
         }
     }
 
-    async getCommandTTS(command, callerName) {
-        const prefix = this.generalSettings.prefix;
-        const commandTTS = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxTTS')}`;
-        const commandTTSEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxTTS')}`;
-
-        let text = null;
-        if (command.toLowerCase().startsWith(`${commandTTS}`)) {
-            text = command.slice(`${commandTTS} `.length).trim();
-        }
-        else {
-            text = command.slice(`${commandTTSEn} `.length).trim();
-        }
-
-        await DiscordMessages.sendTTSMessage(this.guildId, callerName, text);
-        return Client.client.intlGet(this.guildId, 'sentTextToSpeech');
-    }
-
     getCommandUnmute() {
         const instance = Client.client.getInstance(this.guildId);
         instance.generalSettings.muteInGameBotMessages = false;
@@ -2801,25 +2293,6 @@ class RustPlus extends RustPlusLib {
         Client.client.setInstance(this.guildId, instance);
 
         return Client.client.intlGet(this.guildId, 'inGameBotMessagesUnmuted');
-    }
-
-    getCommandUpkeep() {
-        const instance = Client.client.getInstance(this.guildId);
-        let cupboardFound = false;
-        const strings = [];
-        for (const [key, value] of Object.entries(instance.serverList[this.serverId].storageMonitors)) {
-            if (value.type !== 'toolCupboard') continue;
-
-            if (value.upkeep) {
-                cupboardFound = true;
-                const upkeepStr = Client.client.intlGet(this.guildId, 'upkeep').toLowerCase();
-                strings.push(`${value.name} [${key}] ${upkeepStr}: ${value.upkeep}`);
-            }
-        }
-
-        if (!cupboardFound) return Client.client.intlGet(this.guildId, 'noToolCupboardWereFound');
-
-        return strings;
     }
 
     getCommandUptime() {

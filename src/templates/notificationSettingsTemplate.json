@@ -19,6 +19,31 @@
         "discord": true,
         "inGame": false
     },
+    "cargoShipLeavingSetting": {
+        "image": "cargoship_logo.png",
+        "discord": true,
+        "inGame": false
+    },
+    "cargoShipDockingSetting": {
+        "image": "cargoship_logo.png",
+        "discord": true,
+        "inGame": false
+    },
+    "cargoShipDockedSetting": {
+        "image": "cargoship_logo.png",
+        "discord": true,
+        "inGame": false
+    },
+    "cargoShipUndockingSetting": {
+        "image": "cargoship_logo.png",
+        "discord": true,
+        "inGame": false
+    },
+    "cargoShipLockedCrateSpawnedSetting": {
+        "image": "locked_crate_cargoship_logo.png",
+        "discord": true,
+        "inGame": false
+    },
     "patrolHelicopterDetectedSetting": {
         "image": "patrol_helicopter_logo.png",
         "discord": true,

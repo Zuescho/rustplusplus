@@ -24,7 +24,6 @@ const Fs = require('fs');
 const Path = require('path');
 
 const Battlemetrics = require('../structures/Battlemetrics');
-const Cctv = require('./Cctv');
 const Config = require('../../config');
 const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const DiscordTools = require('../discordTools/discordTools');
@@ -59,7 +58,6 @@ class DiscordBot extends Discord.Client {
 
         this.items = new Items();
         this.rustlabs = new RustLabs();
-        this.cctv = new Cctv();
 
         this.pollingIntervalMs = Config.general.pollingIntervalMs;
 

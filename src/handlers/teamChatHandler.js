@@ -19,7 +19,25 @@
 */
 
 const DiscordMessages = require('../discordTools/discordMessages.js');
+const TeamChatTranslate = require('../util/teamChatTranslate.js');
 
 module.exports = async function (rustplus, client, message) {
     await DiscordMessages.sendTeamChatMessage(rustplus.guildId, message);
+
+    /* Optional: if the message isn't English or German, post an English
+       translation to the dedicated translated-teamchat channel. Failures
+       here must never block the main team-chat handling. */
+    if (rustplus.generalSettings && rustplus.generalSettings.teamChatTranslateEnabled) {
+        try {
+            const result = await TeamChatTranslate.detectAndTranslate(message.message);
+            if (result.shouldPost) {
+                await DiscordMessages.sendTeamChatTranslatedMessage(
+                    rustplus.guildId, message, result.translatedText, result.detected);
+            }
+        }
+        catch (e) {
+            client.log(client.intlGet(null, 'errorCap'),
+                `teamChatTranslate failed: ${e.message}`, 'error');
+        }
+    }
 }

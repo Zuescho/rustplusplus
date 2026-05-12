@@ -357,6 +357,12 @@ class Map {
                 else {
                     /* Compensate for the text placement */
                     if (monument.token === 'DungeonBase') continue;
+                    /* Some monuments return their asset path as the token
+                       (e.g. "assets/bundled/prefabs/..."). Drawing those
+                       paths on the map produces a long unreadable string
+                       next to the monument — skip them. */
+                    if (typeof monument.token === 'string' &&
+                        monument.token.replace(/\\/g, '/').toLowerCase().includes('assets/bundled')) continue;
 
                     let name = (this.monumentInfo.hasOwnProperty(monument.token)) ?
                         this.monumentInfo[monument.token].map : monument.token;

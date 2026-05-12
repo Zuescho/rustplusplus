@@ -22,6 +22,14 @@ const Constants = require('../util/constants.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const Scrape = require('../util/scrape.js');
+const ActivityDb = require('../util/activityDb.js');
+
+const ACTIVITY_RECOMPUTE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const STEAM_NAME_REFRESH_MS = 24 * 60 * 60 * 1000;
+const RAID_ALERT_RATIO = 0.6;
+const RAID_ALERT_OFF_HOUR_THRESHOLD = 20; /* percent — below this, the group hour counts as "off" */
+const RAID_ALERT_COOLDOWN_MS = 30 * 60 * 1000; /* don't refire within 30 min */
+let _lastActivityRecomputeAt = 0;
 
 module.exports = {
     handler: async function (client, firstTime = false) {
@@ -37,26 +45,13 @@ module.exports = {
 
             if (!firstTime) await module.exports.handleBattlemetricsChanges(client, guildId);
 
-            /* Update information channel battlemetrics players */
-            const bmId = instance.activeServer !== null ?
-                instance.serverList[instance.activeServer].battlemetricsId : null;
-            let condition = instance.generalSettings.displayInformationBattlemetricsAllOnlinePlayers;
-            condition &= instance.activeServer !== null;
-            condition &= bmId !== null;
-            condition &= client.battlemetricsInstances.hasOwnProperty(bmId);
-            condition &= rustplus && rustplus.isOperational;
-
-            if (condition) {
-                await DiscordMessages.sendUpdateBattlemetricsOnlinePlayersInformationMessage(rustplus, bmId);
-            }
-            else {
-                if (instance.informationMessageId.battlemetricsPlayers !== null) {
-                    await DiscordTools.deleteMessageById(guildId, instance.channelId.information,
-                        instance.informationMessageId.battlemetricsPlayers);
-
-                    instance.informationMessageId.battlemetricsPlayers = null;
-                    client.setInstance(guildId, instance);
-                }
+            /* If a previous version of the bot left a "BM all online players"
+               info-channel message around, sweep it once on next poll. */
+            if (instance.informationMessageId.battlemetricsPlayers) {
+                await DiscordTools.deleteMessageById(guildId, instance.channelId.information,
+                    instance.informationMessageId.battlemetricsPlayers);
+                instance.informationMessageId.battlemetricsPlayers = null;
+                client.setInstance(guildId, instance);
             }
 
             for (const [trackerId, content] of Object.entries(instance.trackers)) {
@@ -65,9 +60,51 @@ module.exports = {
 
                 if (!bmInstance || !bmInstance.lastUpdateSuccessful) continue;
 
+                /* Snapshot every tracked player's current online state into
+                   activity_log. This is the foundation for the typical-play-hours
+                   hint and the off-hours raid alarm. Cheap insert per player. */
+                const trackedIds = content.players.map(p => p.playerId).filter(Boolean);
+                let onlineNowCount = 0;
+                if (trackedIds.length > 0) {
+                    const onlineSet = new Set(bmInstance.onlinePlayers.map(String));
+                    ActivityDb.logSnapshot(trackedIds, onlineSet, Math.floor(Date.now() / 1000));
+                    onlineNowCount = trackedIds.filter(id => onlineSet.has(String(id))).length;
+                }
+
+                /* Off-hours raid alarm: if the group's typical online rate at
+                   the current local hour is below the off-hours threshold AND
+                   at least 60% of the tracker is online right now, fire once
+                   (with a cooldown so we don't spam during a sustained event). */
+                if (content.raidAlert && trackedIds.length >= 2 && !firstTime) {
+                    const ratio = onlineNowCount / trackedIds.length;
+                    if (ratio >= RAID_ALERT_RATIO) {
+                        const now = new Date();
+                        const dow = now.getDay();
+                        const hour = now.getHours();
+                        if (ActivityDb.isOffHourForGroup(trackedIds, dow, hour, RAID_ALERT_OFF_HOUR_THRESHOLD)) {
+                            const nowSec = Math.floor(Date.now() / 1000);
+                            const last = ActivityDb.getLastAlertAt(`${guildId}:${trackerId}`);
+                            if ((nowSec - last) * 1000 >= RAID_ALERT_COOLDOWN_MS) {
+                                ActivityDb.setLastAlertAt(`${guildId}:${trackerId}`, nowSec);
+                                await module.exports.fireRaidAlert(client, guildId, trackerId,
+                                    content, onlineNowCount, trackedIds.length);
+                            }
+                        }
+                    }
+                }
+
+                /* Steam profile names rarely change. Scrape only when:
+                     - the per-player record has never been scraped, OR
+                     - it's been more than STEAM_NAME_REFRESH_MS since the last scrape.
+                   Bot startup (`firstTime`) seeds names for any player that was added
+                   before this field existed. */
                 if (firstTime || searchSteamProfiles) {
+                    const nowMs = Date.now();
                     for (const player of content.players) {
                         if (player.steamId === null) continue;
+
+                        const lastAt = player.steamNameLastScrapedAt || 0;
+                        if (!firstTime && (nowMs - lastAt) < STEAM_NAME_REFRESH_MS) continue;
 
                         let name = null;
                         if (calledSteamProfiles.hasOwnProperty(player.steamId)) {
@@ -79,6 +116,7 @@ module.exports = {
                         }
                         if (name === null) continue;
 
+                        player.steamNameLastScrapedAt = nowMs;
                         name = (content.clanTag !== '' ? `${content.clanTag} ` : '') + `${name}`;
 
                         if (player.name !== name) {
@@ -178,6 +216,21 @@ module.exports = {
         }
         else {
             client.battlemetricsIntervalCounter += 1;
+        }
+
+        /* Aggregate the last 30 days into the (player, dow, hour) pattern grid
+           once per day, and purge anything older than 30 days. */
+        const nowMs = Date.now();
+        if (nowMs - _lastActivityRecomputeAt >= ACTIVITY_RECOMPUTE_INTERVAL_MS) {
+            try {
+                ActivityDb.purgeOld(30);
+                ActivityDb.recomputePatterns(30);
+            }
+            catch (e) {
+                client.log(client.intlGet(null, 'errorCap'),
+                    `ActivityDb recompute failed: ${e.message}`, 'error');
+            }
+            _lastActivityRecomputeAt = nowMs;
         }
     },
 
@@ -436,5 +489,26 @@ module.exports = {
 
         await DiscordMessages.sendBattlemetricsEventMessage(guildId, battlemetricsId, title, description, null,
             instance.trackers[trackerId].everyone);
+    },
+
+    fireRaidAlert: async function (client, guildId, trackerId, tracker, onlineCount, totalCount) {
+        const rustplus = client.rustplusInstances[guildId];
+        const str = client.intlGet(guildId, 'trackerRaidAlertText', {
+            tracker: tracker.name,
+            online: onlineCount,
+            total: totalCount
+        });
+
+        await DiscordMessages.sendActivityNotificationMessage(
+            guildId, tracker.serverId, Constants.COLOR_ACTIVE, str, null, tracker.title, true);
+
+        if (rustplus && rustplus.serverId === tracker.serverId) {
+            /* Force-send: bypass the in-game mute so this alert reaches team chat
+               even when bot chatter is muted, same pattern as Smart Alarms. */
+            rustplus.sendInGameMessage(str, true);
+        }
+
+        client.log(client.intlGet(null, 'infoCap'),
+            `Raid alert fired for tracker #${trackerId} (${onlineCount}/${totalCount} online)`);
     },
 }

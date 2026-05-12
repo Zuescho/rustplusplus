@@ -18,11 +18,10 @@
 
 */
 
-const Axios = require('axios');
-
 const Client = require('../../index.ts');
 const RandomUsernames = require('../staticFiles/RandomUsernames.json');
 const Utils = require = require('../util/utils.js');
+const BmRateLimiter = require('../util/battlemetricsRateLimiter.js');
 
 const SERVER_LOG_SIZE = 1000;
 const CONNECTION_LOG_SIZE = 1000;
@@ -220,7 +219,7 @@ class Battlemetrics {
      */
     async #request(api_call) {
         try {
-            return await Axios.get(api_call);
+            return await BmRateLimiter.scheduleGet(api_call);
         }
         catch (e) {
             return {};

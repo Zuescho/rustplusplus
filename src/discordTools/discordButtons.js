@@ -387,6 +387,17 @@ module.exports = {
             }));
     },
 
+    getTeamChatTranslateEnabledButton: function (guildId, enabled) {
+        return new Discord.ActionRowBuilder().addComponents(
+            module.exports.getButton({
+                customId: 'TeamChatTranslateEnabled',
+                label: enabled ?
+                    Client.client.intlGet(guildId, 'enabledCap') :
+                    Client.client.intlGet(guildId, 'disabledCap'),
+                style: enabled ? SUCCESS : DANGER
+            }));
+    },
+
     getLeaderCommandEnabledButton: function (guildId, enabled) {
         return new Discord.ActionRowBuilder().addComponents(
             module.exports.getButton({
@@ -448,6 +459,11 @@ module.exports = {
                     style: tracker.everyone ? SUCCESS : DANGER
                 }),
                 module.exports.getButton({
+                    customId: `TrackerRaidAlert${identifier}`,
+                    label: Client.client.intlGet(guildId, 'raidAlertCap'),
+                    style: tracker.raidAlert ? SUCCESS : DANGER
+                }),
+                module.exports.getButton({
                     customId: `TrackerUpdate${identifier}`,
                     label: Client.client.intlGet(guildId, 'updateCap'),
                     style: PRIMARY
@@ -484,17 +500,6 @@ module.exports = {
             }));
     },
 
-    getItemAvailableNotifyInGameButton: function (guildId, enabled) {
-        return new Discord.ActionRowBuilder().addComponents(
-            module.exports.getButton({
-                customId: 'ItemAvailableNotifyInGame',
-                label: enabled ?
-                    Client.client.intlGet(guildId, 'enabledCap') :
-                    Client.client.intlGet(guildId, 'disabledCap'),
-                style: enabled ? SUCCESS : DANGER
-            }));
-    },
-
     getHelpButtons: function () {
         return [
             new Discord.ActionRowBuilder().addComponents(
@@ -521,17 +526,6 @@ module.exports = {
                     url: 'https://github.com/alexemanuelol/rustplusplus-Credential-Application/releases/v1.4.0'
                 })
             )];
-    },
-
-    getDisplayInformationBattlemetricsAllOnlinePlayersButton: function (guildId, enabled) {
-        return new Discord.ActionRowBuilder().addComponents(
-            module.exports.getButton({
-                customId: 'DisplayInformationBattlemetricsAllOnlinePlayers',
-                label: enabled ?
-                    Client.client.intlGet(guildId, 'enabledCap') :
-                    Client.client.intlGet(guildId, 'disabledCap'),
-                style: enabled ? SUCCESS : DANGER
-            }));
     },
 
     getDisplayInformationBattlemetricsUpcomingWipesButton: function (guildId, enabled) {

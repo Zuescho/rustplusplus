@@ -181,17 +181,23 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
     if (!server || (server && !server.alarms[entityId])) return;
 
     const active = message.broadcast.entityChanged.payload.value;
-    server.alarms[entityId].active = active;
-    server.alarms[entityId].reachable = true;
+    const alarm = server.alarms[entityId];
+    alarm.active = active;
+    alarm.reachable = true;
     client.setInstance(rustplus.guildId, instance);
 
+    const eventTag = (alarm.eventTag || '').trim();
+
     if (active) {
-        server.alarms[entityId].lastTrigger = Math.floor(new Date() / 1000);
+        alarm.lastTrigger = Math.floor(new Date() / 1000);
         client.setInstance(rustplus.guildId, instance);
         await DiscordMessages.sendSmartAlarmTriggerMessage(rustplus.guildId, serverId, entityId);
 
-        if (instance.generalSettings.smartAlarmNotifyInGame) {
-            rustplus.sendInGameMessage(`${server.alarms[entityId].name}: ${server.alarms[entityId].message}`, true);
+        /* Suppress the legacy "{name}: {message}" in-game line when an event
+           tag is set — the event-tagged path below produces a cleaner
+           "{tag} started" message; firing both is duplicate noise. */
+        if (instance.generalSettings.smartAlarmNotifyInGame && !eventTag) {
+            rustplus.sendInGameMessage(`${alarm.name}: ${alarm.message}`, true);
         }
 
         for (const [groupId, group] of Object.entries(server.switchGroups)) {
@@ -207,6 +213,26 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
                 await DiscordMessages.sendSmartSwitchGroupMessage(rustplus.guildId, serverId, groupId);
             }
         }
+    }
+
+    /* Event-tagged alarms emit BOTH start and stop notifications so a powered
+       in-game event (Large Excavator, Cargo Ship, etc.) shows up in the activity
+       channel and team chat at both edges. Untagged alarms keep the original
+       rising-edge-only behavior. */
+    if (eventTag) {
+        const verb = active
+            ? client.intlGet(rustplus.guildId, 'eventTagStartedVerb')
+            : client.intlGet(rustplus.guildId, 'eventTagStoppedVerb');
+        const eventText = client.intlGet(rustplus.guildId, 'eventTagNotificationText',
+            { tag: eventTag, verb });
+        const color = active ? Constants.COLOR_ACTIVE : Constants.COLOR_INACTIVE;
+
+        await DiscordMessages.sendActivityNotificationMessage(
+            rustplus.guildId, serverId, color, eventText, null, alarm.server, alarm.everyone);
+
+        /* Bypass the in-game mute, same as smart-alarm triggers do, so the
+           team always sees the start/stop in team chat. */
+        rustplus.sendInGameMessage(eventText, true);
     }
 
     DiscordMessages.sendSmartAlarmMessage(rustplus.guildId, rustplus.serverId, entityId);

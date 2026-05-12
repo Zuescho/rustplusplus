@@ -396,15 +396,26 @@ module.exports = {
         await module.exports.sendMessage(guildId, content, null, instance.channelId.teamchat);
     },
 
-    sendTTSMessage: async function (guildId, name, text) {
+    sendTeamChatTranslatedMessage: async function (guildId, message, translatedText, detectedLang) {
         const instance = Client.client.getInstance(guildId);
+        if (!instance.channelId.teamchatTranslated) return;
 
-        const content = {
-            content: Client.client.intlGet(guildId, 'userSaid', { user: name, text: text }),
-            tts: true
+        let color = Constants.COLOR_TEAMCHAT_DEFAULT;
+        if (instance.teamChatColors.hasOwnProperty(message.steamId)) {
+            color = instance.teamChatColors[message.steamId];
         }
 
-        await module.exports.sendMessage(guildId, content, null, instance.channelId.teamchat);
+        const langTag = detectedLang ? ` (${detectedLang} → en)` : '';
+        const description = `**${message.name}**${langTag}\n${translatedText}\n> ${message.message}`;
+
+        const content = {
+            embeds: [DiscordEmbeds.getEmbed({
+                color: color,
+                description: description
+            })]
+        };
+
+        await module.exports.sendMessage(guildId, content, null, instance.channelId.teamchatTranslated);
     },
 
     sendUpdateMapInformationMessage: async function (rustplus) {
@@ -481,22 +492,6 @@ module.exports = {
         }
     },
 
-    sendUpdateBattlemetricsOnlinePlayersInformationMessage: async function (rustplus, battlemetricsId) {
-        const instance = Client.client.getInstance(rustplus.guildId);
-
-        const content = {
-            embeds: [DiscordEmbeds.getUpdateBattlemetricsOnlinePlayersInformationEmbed(rustplus, battlemetricsId)]
-        }
-
-        const message = await module.exports.sendMessage(rustplus.guildId, content,
-            instance.informationMessageId.battlemetricsPlayers, instance.channelId.information);
-
-        if (message.id !== instance.informationMessageId.battlemetricsPlayers) {
-            instance.informationMessageId.battlemetricsPlayers = message.id;
-            Client.client.setInstance(rustplus.guildId, instance);
-        }
-    },
-
     sendDiscordCommandResponseMessage: async function (rustplus, client, message, response) {
         const content = {
             embeds: [DiscordEmbeds.getDiscordCommandResponseEmbed(rustplus, response)]
@@ -514,18 +509,6 @@ module.exports = {
         await Client.client.interactionEditReply(interaction, content);
     },
 
-    sendItemAvailableInVendingMachineMessage: async function (rustplus, str) {
-        const instance = Client.client.getInstance(rustplus.guildId);
-
-        const content = {
-            embeds: [DiscordEmbeds.getItemAvailableVendingMachineEmbed(
-                rustplus.guildId, rustplus.serverId, str
-            )]
-        }
-
-        await module.exports.sendMessage(rustplus.guildId, content, null, instance.channelId.activity);
-    },
-
     sendHelpMessage: async function (interaction) {
         const content = {
             embeds: [DiscordEmbeds.getHelpEmbed(interaction.guildId)],
@@ -536,45 +519,9 @@ module.exports = {
         await Client.client.interactionReply(interaction, content);
     },
 
-    sendCctvMessage: async function (interaction, monument, cctvCodes, dynamic) {
-        const content = {
-            embeds: [DiscordEmbeds.getCctvEmbed(interaction.guildId, monument, cctvCodes, dynamic)],
-            ephemeral: true
-        }
-
-        await Client.client.interactionReply(interaction, content);
-    },
-
     sendUptimeMessage: async function (interaction, uptime) {
         const content = {
             embeds: [DiscordEmbeds.getUptimeEmbed(interaction.guildId, uptime)],
-            ephemeral: true
-        }
-
-        await Client.client.interactionEditReply(interaction, content);
-    },
-
-    sendCraftMessage: async function (interaction, craftDetails, quantity) {
-        const content = {
-            embeds: [DiscordEmbeds.getCraftEmbed(interaction.guildId, craftDetails, quantity)],
-            ephemeral: true
-        }
-
-        await Client.client.interactionEditReply(interaction, content);
-    },
-
-    sendResearchMessage: async function (interaction, researchDetails) {
-        const content = {
-            embeds: [DiscordEmbeds.getResearchEmbed(interaction.guildId, researchDetails)],
-            ephemeral: true
-        }
-
-        await Client.client.interactionEditReply(interaction, content);
-    },
-
-    sendRecycleMessage: async function (interaction, recycleDetails, quantity, recyclerType) {
-        const content = {
-            embeds: [DiscordEmbeds.getRecycleEmbed(interaction.guildId, recycleDetails, quantity, recyclerType)],
             ephemeral: true
         }
 

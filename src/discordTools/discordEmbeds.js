@@ -25,6 +25,7 @@ const Constants = require('../util/constants.js');
 const DiscordTools = require('./discordTools.js');
 const InstanceUtils = require('../util/instanceUtils.js');
 const Timer = require('../util/timer');
+const ActivityDb = require('../util/activityDb.js');
 
 function isValidUrl(url) {
     if (url.startsWith('https') || url.startsWith('http')) return true;
@@ -170,31 +171,38 @@ module.exports = {
         description += `__**${Client.client.intlGet(guildId, 'clanTag')}:**__ `;
         description += tracker.clanTag !== '' ? `\`${tracker.clanTag}\`` : '';
 
+        /* Group active-hours hint (averaged across all players with enough samples). */
+        const groupPlayerIds = tracker.players.map(p => p.playerId).filter(Boolean);
+        const groupHint = ActivityDb.getGroupActiveHint(groupPlayerIds);
+        if (groupHint) {
+            description += `\n__**${Client.client.intlGet(guildId, 'groupActive')}:**__ ${groupHint}`;
+        }
+
         let totalCharacters = description.length;
         let fieldIndex = 0
-        let playerName = [''], playerId = [''], playerStatus = [''];
-        let playerNameCharacters = 0, playerIdCharacters = 0, playerStatusCharacters = 0;
+        let playerName = [''], playerStatus = [''];
+        let playerNameCharacters = 0, playerStatusCharacters = 0;
         for (const player of tracker.players) {
-            let name = `${player.name}`;
-
+            /* Plain name (not a link) + small markdown links to BM/Steam profiles.
+               Layout: `Name  [B](bmUrl) [S](steamUrl)`. Either link is omitted
+               if the corresponding ID is missing. */
             const nameMaxLength = Constants.EMBED_FIELD_MAX_WIDTH_LENGTH_3;
-            name = name.length <= nameMaxLength ? name : name.substring(0, nameMaxLength - 2) + '..';
-            name += '\n';
+            const rawName = `${player.name || '-'}`;
+            const displayName = rawName.length <= nameMaxLength
+                ? rawName : rawName.substring(0, nameMaxLength - 2) + '..';
 
-            let id = '';
+            const links = [];
+            if (player.playerId !== null && player.playerId !== undefined) {
+                links.push(`[B](${Constants.BATTLEMETRICS_PROFILE_URL}${player.playerId})`);
+            }
+            if (player.steamId !== null && player.steamId !== undefined) {
+                links.push(`[S](https://steamcommunity.com/profiles/${player.steamId})`);
+            }
+            const nameLine = links.length
+                ? `${displayName}  ${links.join(' ')}\n`
+                : `${displayName}\n`;
+
             let status = '';
-
-            const steamIdLink = Constants.GET_STEAM_PROFILE_LINK(player.steamId);
-            const bmIdLink = Constants.GET_BATTLEMETRICS_PROFILE_LINK(player.playerId);
-
-            const isNewLine = (player.steamId !== null && player.playerId !== null) ? true : false;
-            id += `${player.steamId !== null ? steamIdLink : ''}`;
-            id += `${player.steamId !== null && player.playerId !== null ? ' /\n' : ''}`;
-            id += `${player.playerId !== null ? bmIdLink : ''}`;
-            id += `${player.steamId === null && player.playerId === null ?
-                Client.client.intlGet(guildId, 'empty') : ''}`;
-            id += '\n';
-
             if (!bmInstance.players.hasOwnProperty(player.playerId) || !successful) {
                 status += `${Constants.NOT_FOUND_EMOJI}\n`;
             }
@@ -208,40 +216,30 @@ module.exports = {
                     time = bmInstance.getOfflineTime(player.playerId);
                     status += `${Constants.OFFLINE_EMOJI}`;
                 }
-                status += time !== null ? ` [${time[1]}]\n` : '\n';
-            }
-
-            if (isNewLine) {
-                name += '\n';
+                status += time !== null ? ` [${time[1]}]` : '';
+                const activeHint = ActivityDb.getPlayerActiveHint(player.playerId);
+                if (activeHint) status += ` ${activeHint}`;
                 status += '\n';
             }
 
-            if (totalCharacters + (name.length + id.length + status.length) >= Constants.EMBED_MAX_TOTAL_CHARACTERS) {
+            if (totalCharacters + (nameLine.length + status.length) >= Constants.EMBED_MAX_TOTAL_CHARACTERS) {
                 break;
             }
 
-            if ((playerNameCharacters + name.length) > Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS ||
-                (playerIdCharacters + id.length) > Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS ||
+            if ((playerNameCharacters + nameLine.length) > Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS ||
                 (playerStatusCharacters + status.length) > Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS) {
                 fieldIndex += 1;
-
                 playerName.push('');
-                playerId.push('');
                 playerStatus.push('');
-
                 playerNameCharacters = 0;
-                playerIdCharacters = 0;
                 playerStatusCharacters = 0;
             }
 
-            playerNameCharacters += name.length;
-            playerIdCharacters += id.length;
+            playerNameCharacters += nameLine.length;
             playerStatusCharacters += status.length;
+            totalCharacters += nameLine.length + status.length;
 
-            totalCharacters += name.length + id.length + status.length;
-
-            playerName[fieldIndex] += name;
-            playerId[fieldIndex] += id;
+            playerName[fieldIndex] += nameLine;
             playerStatus[fieldIndex] += status;
         }
 
@@ -250,12 +248,6 @@ module.exports = {
             fields.push({
                 name: i === 0 ? `__${Client.client.intlGet(guildId, 'name')}__\n\u200B` : '\u200B',
                 value: playerName[i] !== '' ? playerName[i] : Client.client.intlGet(guildId, 'empty'),
-                inline: true
-            });
-            fields.push({
-                name: i === 0 ? `__${Client.client.intlGet(guildId, 'steamId')}__ /\n` +
-                    `__${Client.client.intlGet(guildId, 'battlemetricsId')}__` : '\u200B',
-                value: playerId[i] !== '' ? playerId[i] : Client.client.intlGet(guildId, 'empty'),
                 inline: true
             });
             fields.push({
@@ -981,86 +973,6 @@ module.exports = {
         });
     },
 
-    getUpdateBattlemetricsOnlinePlayersInformationEmbed: function (rustplus, battlemetricsId) {
-        const bmInstance = Client.client.battlemetricsInstances[battlemetricsId];
-        const guildId = rustplus.guildId;
-
-        const playerIds = bmInstance.getOnlinePlayerIdsOrderedByTime();
-
-        let totalCharacters = 0;
-        let fieldCharacters = 0;
-
-        const title = Client.client.intlGet(guildId, 'battlemetricsOnlinePlayers');
-        const footer = { text: bmInstance.server_name };
-
-        totalCharacters += title.length;
-        totalCharacters += bmInstance.server_name.length;
-        totalCharacters += Client.client.intlGet(guildId, 'andMorePlayers', { number: 100 }).length;
-        totalCharacters += `${Client.client.intlGet(guildId, 'players')}`.length;
-
-        const fields = [''];
-        let fieldIndex = 0;
-        let isEmbedFull = false;
-        let playerCounter = 0;
-        for (const playerId of playerIds) {
-            playerCounter += 1;
-
-            const status = bmInstance.players[playerId]['status'];
-            let time = status ? bmInstance.getOnlineTime(playerId) : bmInstance.getOfflineTime(playerId);
-            time = time !== null ? time[1] : '';
-
-            let playerStr = status ? Constants.ONLINE_EMOJI : Constants.OFFLINE_EMOJI;
-            playerStr += ` [${time}] `;
-
-            const nameMaxLength = Constants.EMBED_FIELD_MAX_WIDTH_LENGTH_3 - (3 + time.length);
-
-            let name = bmInstance.players[playerId]['name'].replace('[', '(').replace(']', ')');
-            name = name.length <= nameMaxLength ? name : name.substring(0, nameMaxLength - 2) + '..';
-
-            playerStr += `[${name}](${Constants.BATTLEMETRICS_PROFILE_URL + `${playerId}`})\n`;
-
-            if (totalCharacters + playerStr.length >= Constants.EMBED_MAX_TOTAL_CHARACTERS) {
-                isEmbedFull = true;
-                break;
-            }
-
-            if (fieldCharacters + playerStr.length >= Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS) {
-                fieldCharacters = 0;
-                fieldIndex += 1;
-                fields.push('');
-            }
-
-            fields[fieldIndex] += playerStr;
-            totalCharacters += playerStr.length;
-            fieldCharacters += playerStr.length;
-        }
-
-        const embed = module.exports.getEmbed({
-            title: title,
-            color: Constants.COLOR_DEFAULT,
-            footer: footer,
-            timestamp: true
-        });
-
-        if (isEmbedFull) {
-            embed.setDescription(Client.client.intlGet(guildId, 'andMorePlayers', {
-                number: playerIds.length - playerCounter
-            }));
-        }
-
-        let fieldCounter = 0;
-        for (const field of fields) {
-            embed.addFields({
-                name: fieldCounter === 0 ? Client.client.intlGet(guildId, 'players') : '\u200B',
-                value: field === '' ? '\u200B' : field,
-                inline: true
-            });
-            fieldCounter += 1;
-        }
-
-        return embed;
-    },
-
     getDiscordCommandResponseEmbed: function (rustplus, response) {
         const instance = Client.client.getInstance(rustplus.guildId);
 
@@ -1110,19 +1022,6 @@ module.exports = {
         });
     },
 
-    getItemAvailableVendingMachineEmbed: function (guildId, serverId, str) {
-        const instance = Client.client.getInstance(guildId);
-        const server = instance.serverList[serverId];
-        return module.exports.getEmbed({
-            color: Constants.COLOR_DEFAULT,
-            timestamp: true,
-            footer: { text: server.title },
-            author: {
-                name: str
-            }
-        });
-    },
-
     getUserSendEmbed: function (guildId, serverId, sender, str) {
         const instance = Client.client.getInstance(guildId);
         const server = instance.serverList[serverId];
@@ -1153,115 +1052,11 @@ module.exports = {
         });
     },
 
-    getCctvEmbed: function (guildId, monument, cctvCodes, dynamic) {
-        let code = '';
-        for (const cctvCode of cctvCodes) {
-            code += `${cctvCode} \n`;
-        }
-        if (dynamic) {
-            code += Client.client.intlGet(guildId, 'asteriskCctvDesc');
-        }
-        return module.exports.getEmbed({
-            color: Constants.COLOR_DEFAULT,
-            timestamp: true,
-            title: `${monument} CCTV ${Client.client.intlGet(guildId, 'codes')}`,
-            description: code
-        });
-    },
-
     getUptimeEmbed: function (guildId, uptime) {
         return module.exports.getEmbed({
             color: Constants.COLOR_DEFAULT,
             timestamp: true,
             title: uptime
-        });
-    },
-
-    getCraftEmbed: function (guildId, craftDetails, quantity) {
-        let title = '';
-        let description = '';
-
-        if (quantity === 1) {
-            title = `${craftDetails[1].name}`;
-            description += `__**${Client.client.intlGet(guildId, 'time')}:**__ ${craftDetails[2].timeString}`;
-        }
-        else {
-            title = `${craftDetails[1].name} x${quantity}`;
-            const time = Timer.secondsToFullScale(craftDetails[2].time * quantity, '', true);
-            description += `__**${Client.client.intlGet(guildId, 'time')}:**__ ${time}`;
-        }
-
-        let items = '', quantities = '';
-        for (const item of craftDetails[2].ingredients) {
-            const itemName = Client.client.items.getName(item.id);
-            items += `${itemName}\n`;
-            quantities += `${item.quantity * quantity}\n`;
-        }
-
-        return module.exports.getEmbed({
-            title: title,
-            description: description,
-            color: Constants.COLOR_DEFAULT,
-            timestamp: true,
-            fields: [
-                { name: Client.client.intlGet(guildId, 'quantity'), value: items, inline: true },
-                { name: Client.client.intlGet(guildId, 'hoster'), value: quantities, inline: true }]
-        });
-    },
-
-    getResearchEmbed: function (guildId, researchDetails) {
-        let typeString = '', scrapString = '';
-        if (researchDetails[2].researchTable !== null) {
-            typeString += `${Client.client.intlGet(guildId, 'researchTable')}\n`;
-            scrapString += `${researchDetails[2].researchTable}\n`;
-        }
-        if (researchDetails[2].workbench !== null) {
-            typeString += `${Client.client.items.getName(researchDetails[2].workbench.type)}\n`;
-            const scrap = researchDetails[2].workbench.scrap;
-            const totalScrap = researchDetails[2].workbench.totalScrap;
-            scrapString += `${scrap} (${Client.client.intlGet(guildId, 'total')} ${totalScrap})`;
-        }
-
-        return module.exports.getEmbed({
-            title: `${researchDetails[1].name}`,
-            color: Constants.COLOR_DEFAULT,
-            timestamp: true,
-            fields: [
-                { name: Client.client.intlGet(guildId, 'type'), value: typeString, inline: true },
-                { name: Client.client.intlGet(guildId, 'scrap'), value: scrapString, inline: true }]
-        });
-    },
-
-    getRecycleEmbed: function (guildId, recycleDetails, quantity, recyclerType) {
-        let title = quantity === 1 ? `${recycleDetails[1].name}` : `${recycleDetails[1].name} x${quantity}`;
-        title += ` (${Client.client.intlGet(guildId, recyclerType)})`;
-
-        const recycleData = Client.client.rustlabs.getRecycleDataFromArray([
-            { itemId: recycleDetails[0], quantity: quantity, itemIsBlueprint: false }
-        ]);
-
-        let items0 = '', quantities0 = '';
-        for (const item of recycleDetails[2][recyclerType]['yield']) {
-            items0 += `${Client.client.items.getName(item.id)}\n`;
-            quantities0 += (item.probability !== 1) ? `${parseInt(item.probability * 100)}%\n` : `${item.quantity}\n`;
-        }
-
-        let items1 = '', quantities1 = '';
-        for (const item of recycleData[recyclerType]) {
-            items1 += `${Client.client.items.getName(item.itemId)}\n`;
-            quantities1 += `${item.quantity}\n`;
-        }
-
-        return module.exports.getEmbed({
-            title: title,
-            color: Constants.COLOR_DEFAULT,
-            timestamp: true,
-            fields: [
-                { name: Client.client.intlGet(guildId, 'yield'), value: items0, inline: true },
-                { name: '\u200B', value: quantities0, inline: true },
-                { name: '\u200B', value: '\u200B', inline: false },
-                { name: Client.client.intlGet(guildId, 'calculated'), value: items1, inline: true },
-                { name: '\u200B', value: quantities1, inline: true }]
         });
     },
 
@@ -1295,200 +1090,14 @@ module.exports = {
     },
 
     getItemEmbed: function (guildId, itemName, itemId, type) {
-        const title = `${itemName} (${itemId})`;
-
-        const fields = [];
-        const embed = module.exports.getEmbed({
-            title: title,
+        /* Slim form: title + id only. RustLabs sub-details (decay, craft,
+           recycle, research, etc.) were removed when the lookup commands
+           were dropped — use rustlabs.com for the deeper info. */
+        void type;
+        return module.exports.getEmbed({
+            title: `${itemName} (${itemId})`,
             color: Constants.COLOR_DEFAULT,
             timestamp: true
         });
-
-        const decayDetails = type === 'items' ? Client.client.rustlabs.getDecayDetailsById(itemId) :
-            Client.client.rustlabs.getDecayDetailsByName(itemId);
-        if (decayDetails !== null) {
-            const details = decayDetails[3];
-            const hp = details.hpString;
-            if (hp !== null) {
-                fields.push({
-                    name: Client.client.intlGet(guildId, 'hp'),
-                    value: hp,
-                    inline: true
-                });
-            }
-
-            let decayString = '';
-            const decay = details.decayString;
-            if (decay !== null) {
-                decayString += `${decay}\n`;
-            }
-
-            const decayOutside = details.decayOutsideString;
-            if (decayOutside !== null) {
-                decayString += `${Client.client.intlGet(guildId, 'outside')}: ${decayOutside}\n`;
-            }
-
-            const decayInside = details.decayInsideString;
-            if (decayInside !== null) {
-                decayString += `${Client.client.intlGet(guildId, 'inside')}: ${decayInside}\n`;
-            }
-
-            const decayUnderwater = details.decayUnderwaterString;
-            if (decayUnderwater !== null) {
-                decayString += `${Client.client.intlGet(guildId, 'underwater')}: ${decayUnderwater}\n`;
-            }
-
-            if (decayString !== '') {
-                fields.push({
-                    name: Client.client.intlGet(guildId, 'decay'),
-                    value: decayString,
-                    inline: true
-                });
-            }
-        }
-
-        const despawnDetails = type === 'items' ? Client.client.rustlabs.getDespawnDetailsById(itemId) : null;
-        if (despawnDetails !== null) {
-            const details = despawnDetails[2];
-            fields.push({
-                name: Client.client.intlGet(guildId, 'despawnTime'),
-                value: details.timeString,
-                inline: true
-            });
-        }
-
-        const stackDetails = type === 'items' ? Client.client.rustlabs.getStackDetailsById(itemId) : null;
-        if (stackDetails !== null) {
-            const details = stackDetails[2];
-            fields.push({
-                name: Client.client.intlGet(guildId, 'stackSize'),
-                value: details.quantity,
-                inline: true
-            });
-        }
-
-
-        const upkeepDetails = type === 'items' ? Client.client.rustlabs.getUpkeepDetailsById(itemId) :
-            Client.client.rustlabs.getUpkeepDetailsByName(itemId);
-        if (upkeepDetails !== null) {
-            const details = upkeepDetails[3];
-
-            let upkeepString = '';
-            for (const item of details) {
-                const name = Client.client.items.getName(item.id);
-                const quantity = item.quantity;
-                upkeepString += `${quantity} ${name}\n`;
-            }
-
-            fields.push({
-                name: Client.client.intlGet(guildId, 'upkeep'),
-                value: upkeepString,
-                inline: true
-            });
-        }
-
-        const craftDetails = type === 'items' ? Client.client.rustlabs.getCraftDetailsById(itemId) : null;
-        if (craftDetails !== null) {
-            const details = craftDetails[2];
-            let workbenchString = '';
-            if (details.workbench !== null) {
-                const workbenchShortname = Client.client.items.getShortName(details.workbench);
-                switch (workbenchShortname) {
-                    case 'workbench1': {
-                        workbenchString = ' (T1)';
-                    } break;
-
-                    case 'workbench2': {
-                        workbenchString = ' (T2)';
-                    } break;
-
-                    case 'workbench3': {
-                        workbenchString = ' (T3)';
-                    } break;
-                }
-            }
-
-            let craftString = '';
-
-            for (const ingredient of details.ingredients) {
-                const amount = `${ingredient.quantity}x`;
-                const name = Client.client.items.getName(ingredient.id);
-                craftString += `${amount} ${name}\n`;
-            }
-
-            if (craftString !== '') {
-                fields.push({
-                    name: Client.client.intlGet(guildId, 'craft') + workbenchString,
-                    value: craftString,
-                    inline: true
-                });
-            }
-        }
-
-        const recycleDetails = type === 'items' ? Client.client.rustlabs.getRecycleDetailsById(itemId) : null;
-        if (recycleDetails !== null) {
-            const details = recycleDetails[2]['recycler']['yield'];
-
-            let recycleString = '';
-            for (const recycleItem of details) {
-                const name = Client.client.items.getName(recycleItem.id);
-                const quantityProbability = recycleItem.probability !== 1 ?
-                    `${parseInt(recycleItem.probability * 100)}%` :
-                    `${recycleItem.quantity}x`;
-                recycleString += `${quantityProbability} ${name}\n`;
-            }
-
-            if (recycleString !== '') {
-                fields.push({
-                    name: Client.client.intlGet(guildId, 'recycle'),
-                    value: recycleString,
-                    inline: true
-                });
-            }
-        }
-
-        const researchDetails = type === 'items' ? Client.client.rustlabs.getResearchDetailsById(itemId) : null;
-        if (researchDetails !== null) {
-            const details = researchDetails[2];
-            let workbenchString = '';
-            if (details.workbench !== null) {
-                const workbenchShortname = Client.client.items.getShortName(details.workbench.type);
-                switch (workbenchShortname) {
-                    case 'workbench1': {
-                        workbenchString = 'T1: ';
-                    } break;
-
-                    case 'workbench2': {
-                        workbenchString = 'T2: ';
-                    } break;
-
-                    case 'workbench3': {
-                        workbenchString = 'T3: ';
-                    } break;
-                }
-                workbenchString += `${details.workbench.scrap} (${details.workbench.totalScrap})\n`;
-            }
-
-            let researchTableString = '';
-            if (details.researchTable !== null) {
-                researchTableString = `${Client.client.intlGet(guildId, 'researchTable')}: ${details.researchTable}\n`;
-            }
-
-            const researchString = `${workbenchString}${researchTableString}`;
-
-            if (researchString !== '') {
-                fields.push({
-                    name: Client.client.intlGet(guildId, 'research'),
-                    value: researchString,
-                    inline: true
-                });
-            }
-        }
-
-        if (fields.length !== 0) {
-            embed.setFields(...fields);
-        }
-
-        return embed;
     },
 }

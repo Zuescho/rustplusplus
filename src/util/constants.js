@@ -59,6 +59,15 @@ module.exports = {
     DEFAULT_DEEP_SEA_WIPE_COOLDOWN_MS: 90 * 60 * 1000, /* 1 hour */
     DEFAULT_DEEP_SEA_WIPE_DURATION_MS: 180 * 60 * 1000, /* 3 hours */
 
+    /* Cargo Ship lifecycle (harbor docking + locked-crate spawn cadence) */
+    CARGO_SHIP_LOOT_ROUNDS: 3,
+    CARGO_SHIP_LOOT_ROUNDS_SPACING_MS: 10 * 60 * 1000, /* 10 min */
+    CARGO_SHIP_HARBOR_DOCKING_TIME_MS: 8 * 60 * 1000, /* 8 min */
+    CARGO_SHIP_HARBOR_DOCKING_DISTANCE: 480,
+    CARGO_SHIP_HARBOR_UNDOCKED_DISTANCE: 280,
+    CARGO_SHIP_LEAVE_AFTER_HARBOR_NO_CRATES_MS: 2 * 60 * 1000, /* 2 min */
+    CARGO_SHIP_LEAVE_AFTER_HARBOR_WITH_CRATES_MS: 19.5 * 60 * 1000, /* 19.5 min */
+
     /* Other constants */
     PATROL_HELI_DOWNED_RADIUS: 400,
     OIL_RIG_CHINOOK_47_MAX_SPAWN_DISTANCE: 550,

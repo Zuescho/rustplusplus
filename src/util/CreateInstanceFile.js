@@ -40,6 +40,7 @@ module.exports = (client, guild) => {
                 commands: null,
                 events: null,
                 teamchat: null,
+                teamchatTranslated: null,
                 switches: null,
                 switchGroups: null,
                 alarms: null,
@@ -58,11 +59,6 @@ module.exports = (client, guild) => {
             serverList: {},
             serverListLite: {},
             trackers: {},
-            marketSubscriptionList: {
-                all: [],
-                buy: [],
-                sell: []
-            },
             teamChatColors: {},
             blacklist: {
                 discordIds: [],
@@ -127,6 +123,7 @@ module.exports = (client, guild) => {
                 commands: null,
                 events: null,
                 teamchat: null,
+                teamchatTranslated: null,
                 switches: null,
                 switchGroups: null,
                 alarms: null,
@@ -143,6 +140,7 @@ module.exports = (client, guild) => {
             if (!instance.channelId.hasOwnProperty('commands')) instance.channelId.commands = null;
             if (!instance.channelId.hasOwnProperty('events')) instance.channelId.events = null;
             if (!instance.channelId.hasOwnProperty('teamchat')) instance.channelId.teamchat = null;
+            if (!instance.channelId.hasOwnProperty('teamchatTranslated')) instance.channelId.teamchatTranslated = null;
             if (!instance.channelId.hasOwnProperty('switches')) instance.channelId.switches = null;
             if (!instance.channelId.hasOwnProperty('switchGroups')) instance.channelId.switchGroups = null;
             if (!instance.channelId.hasOwnProperty('alarms')) instance.channelId.alarms = null;
@@ -173,14 +171,6 @@ module.exports = (client, guild) => {
         if (!instance.hasOwnProperty('serverList')) instance.serverList = {};
         if (!instance.hasOwnProperty('serverListLite')) instance.serverListLite = {};
         if (!instance.hasOwnProperty('trackers')) instance.trackers = {};
-        if (!instance.hasOwnProperty('marketSubscriptionList')) instance.marketSubscriptionList = {
-            all: [],
-            buy: [],
-            sell: []
-        }
-        if (!instance.marketSubscriptionList.hasOwnProperty('all')) instance.marketSubscriptionList['all'] = [];
-        if (!instance.marketSubscriptionList.hasOwnProperty('buy')) instance.marketSubscriptionList['buy'] = [];
-        if (!instance.marketSubscriptionList.hasOwnProperty('sell')) instance.marketSubscriptionList['sell'] = [];
         if (!instance.hasOwnProperty('teamChatColors')) instance.teamChatColors = {};
         if (!instance.hasOwnProperty('blacklist')) instance.blacklist = {
             discordIds: [],

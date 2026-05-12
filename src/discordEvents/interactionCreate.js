@@ -64,6 +64,16 @@ module.exports = {
                 client.log(client.intlGet(null, 'errorCap'), str, 'error');
             }
         }
+        else if (interaction.type === Discord.InteractionType.ApplicationCommandAutocomplete) {
+            const command = interaction.client.commands.get(interaction.commandName);
+            if (!command || typeof command.autocomplete !== 'function') return;
+            try {
+                await command.autocomplete(client, interaction);
+            }
+            catch (e) {
+                client.log(client.intlGet(null, 'errorCap'), e, 'error');
+            }
+        }
         else if (interaction.type === Discord.InteractionType.ModalSubmit) {
             require('../handlers/modalHandler')(client, interaction);
         }

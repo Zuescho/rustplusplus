@@ -15,13 +15,12 @@
     "afkNotify": false,
     "deathNotify": false,
     "mapWipeNotifyEveryone": false,
-    "itemAvailableInVendingMachineNotifyInGame": true,
-    "displayInformationBattlemetricsAllOnlinePlayers": false,
     "displayInformationBattlemetricsUpcomingWipes": false,
     "battlemetricsServerNameChanges": true,
     "battlemetricsTrackerNameChanges": true,
     "battlemetricsGlobalNameChanges": false,
     "battlemetricsGlobalLogin": false,
     "battlemetricsGlobalLogout": false,
+    "teamChatTranslateEnabled": false,
     "mentionUserIds": []
 }

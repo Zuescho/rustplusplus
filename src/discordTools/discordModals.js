@@ -271,6 +271,15 @@ module.exports = {
                 label: Client.client.intlGet(guildId, 'customCommand'),
                 value: entity.command,
                 style: Discord.TextInputStyle.Short
+            })),
+            new Discord.ActionRowBuilder().addComponents(TextInput.getTextInput({
+                customId: 'SmartAlarmEventTag',
+                label: Client.client.intlGet(guildId, 'smartAlarmEventTagLabel'),
+                placeholder: Client.client.intlGet(guildId, 'smartAlarmEventTagPlaceholder'),
+                value: entity.eventTag || '',
+                style: Discord.TextInputStyle.Short,
+                required: false,
+                minLength: 0
             }))
         );
 
@@ -353,8 +362,8 @@ module.exports = {
         modal.addComponents(
             new Discord.ActionRowBuilder().addComponents(TextInput.getTextInput({
                 customId: 'TrackerAddPlayerId',
-                label: `${Client.client.intlGet(guildId, 'steamId')} / ` +
-                    `${Client.client.intlGet(guildId, 'battlemetricsId')}`,
+                label: Client.client.intlGet(guildId, 'trackerPlayerInputLabel'),
+                placeholder: Client.client.intlGet(guildId, 'trackerPlayerInputPlaceholder'),
                 value: '',
                 style: Discord.TextInputStyle.Short
             }))
@@ -376,8 +385,8 @@ module.exports = {
         modal.addComponents(
             new Discord.ActionRowBuilder().addComponents(TextInput.getTextInput({
                 customId: 'TrackerRemovePlayerId',
-                label: `${Client.client.intlGet(guildId, 'steamId')} / ` +
-                    `${Client.client.intlGet(guildId, 'battlemetricsId')}`,
+                label: Client.client.intlGet(guildId, 'trackerPlayerInputLabel'),
+                placeholder: Client.client.intlGet(guildId, 'trackerPlayerInputPlaceholder'),
                 value: '',
                 style: Discord.TextInputStyle.Short
             }))
