@@ -76,7 +76,11 @@ module.exports = {
 function handleMessage(rustplus, message, trademarkString, maxLength) {
     if (typeof message !== 'string') return;
 
+    /* `.match()` with a global regex returns null when the input has no
+       matches — e.g. an empty string. Without the guard the for-of below
+       throws TypeError. */
     const strings = message.match(new RegExp(`.{1,${maxLength}}(\\s|$)`, 'g'));
+    if (!strings) return;
 
     for (const str of strings) {
         rustplus.inGameChatQueue.push(`${trademarkString}${str}`);

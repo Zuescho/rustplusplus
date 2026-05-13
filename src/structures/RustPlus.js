@@ -177,7 +177,7 @@ class RustPlus extends RustPlusLib {
         const time = Timer.getCurrentDateTime();
         const savedString = `${time} - ${str}`;
 
-        if (this.allConnections.length === 10) {
+        if (this.allConnections.length >= 10) {
             this.allConnections.pop();
         }
         this.allConnections.unshift(savedString)
@@ -186,7 +186,7 @@ class RustPlus extends RustPlusLib {
             this.playerConnections[steamId] = [];
         }
 
-        if (this.playerConnections[steamId].length === 10) {
+        if (this.playerConnections[steamId].length >= 10) {
             this.playerConnections[steamId].pop();
         }
         this.playerConnections[steamId].unshift(savedString);
@@ -196,7 +196,7 @@ class RustPlus extends RustPlusLib {
         const time = Timer.getCurrentDateTime();
         data['time'] = time;
 
-        if (this.allDeaths.length === 10) {
+        if (this.allDeaths.length >= 10) {
             this.allDeaths.pop();
         }
         this.allDeaths.unshift(data)
@@ -205,7 +205,7 @@ class RustPlus extends RustPlusLib {
             this.playerDeaths[steamId] = [];
         }
 
-        if (this.playerDeaths[steamId].length === 10) {
+        if (this.playerDeaths[steamId].length >= 10) {
             this.playerDeaths[steamId].pop();
         }
         this.playerDeaths[steamId].unshift(data);
@@ -221,12 +221,12 @@ class RustPlus extends RustPlusLib {
 
         const str = `${Timer.getCurrentDateTime()} - ${message}`;
 
-        if (this.events['all'].length === 10) {
+        if (this.events['all'].length >= 10) {
             this.events['all'].pop();
         }
         this.events['all'].unshift(str);
 
-        if (this.events[eventKey].length === 10) {
+        if (this.events[eventKey].length >= 10) {
             this.events[eventKey].pop();
         }
         this.events[eventKey].unshift(str);
@@ -2274,9 +2274,14 @@ class RustPlus extends RustPlusLib {
         }
         catch (e) {
             const regex = new RegExp('The language "(.*?)"');
-            const invalidLanguage = regex.exec(e.message);
+            /* exec() returns null when the error doesn't match the
+               "language not supported" shape (network failure, rate
+               limit, etc). Without the null guard the catch handler
+               itself throws TypeError, which the caller would not be
+               able to recover from. */
+            const invalidLanguage = (e && e.message) ? regex.exec(e.message) : null;
 
-            if (invalidLanguage.length === 2) {
+            if (invalidLanguage && invalidLanguage.length >= 2) {
                 return Client.client.intlGet(this.guildId, 'languageLangNotSupported', {
                     language: invalidLanguage[1]
                 });

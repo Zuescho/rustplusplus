@@ -1230,7 +1230,7 @@ class MapMarkers {
             this.rustplus.isFirstPoll,
             'locked_crate_small_oil_rig_logo.png');
 
-        this.crateSmallOilRigTimer.stop();
+        if (this.crateSmallOilRigTimer) this.crateSmallOilRigTimer.stop();
         this.crateSmallOilRigTimer = null;
         this.crateSmallOilRigLocation = null;
     }
@@ -1248,7 +1248,7 @@ class MapMarkers {
             this.rustplus.isFirstPoll,
             'locked_crate_large_oil_rig_logo.png');
 
-        this.crateLargeOilRigTimer.stop();
+        if (this.crateLargeOilRigTimer) this.crateLargeOilRigTimer.stop();
         this.crateLargeOilRigTimer = null;
         this.crateLargeOilRigLocation = null;
     }

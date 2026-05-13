@@ -396,19 +396,27 @@ function getHourlyMinutes(playerId, windowSec) {
 }
 
 /* Most recent online→offline and offline→online transitions, returned as
-   unix seconds (or null if never seen). Scans newest-first so a player with
-   thousands of rows costs O(transition-depth) in practice. */
+   unix seconds (or null if never observed in our retained history). Scans
+   newest-first so a player with thousands of rows costs O(transition-depth)
+   in practice — both values are usually populated within the first handful
+   of rows.
+
+   No artificial row limit: with 30-day retention and 60s polls we have at
+   most ~43k rows per player, which SQLite scans on the existing index
+   without breaking a sweat. Returning null for "never observed a
+   transition" is correct — the embed renders that as "Never", which is
+   honest about what we know. A fabricated-from-oldest-row timestamp would
+   be misleading for a player who's been steadily online since before our
+   retention window began. */
 function getLastTransitions(playerId) {
     if (!isAvailable()) return { lastConnectedAt: null, lastDisconnectedAt: null };
     const rows = db.prepare(
-        'SELECT is_online, checked_at FROM activity_log WHERE player_id = ? ORDER BY checked_at DESC LIMIT 5000'
+        'SELECT is_online, checked_at FROM activity_log WHERE player_id = ? ORDER BY checked_at DESC'
     ).all(String(playerId));
     if (rows.length === 0) return { lastConnectedAt: null, lastDisconnectedAt: null };
 
     let lastConnectedAt = null;
     let lastDisconnectedAt = null;
-    /* Walk newest→oldest; the most recent 1 preceded by a 0 is the last
-       connect; the most recent 0 preceded by a 1 is the last disconnect. */
     for (let i = 0; i < rows.length - 1; i++) {
         const cur = rows[i].is_online ? 1 : 0;
         const older = rows[i + 1].is_online ? 1 : 0;
@@ -420,12 +428,6 @@ function getLastTransitions(playerId) {
         }
         if (lastConnectedAt !== null && lastDisconnectedAt !== null) break;
     }
-    /* Edge case: rows only contain a single steady state. Treat the oldest
-       row as the implicit transition into that state so the report at least
-       has something meaningful to show. */
-    const oldest = rows[rows.length - 1];
-    if (lastConnectedAt === null && oldest.is_online) lastConnectedAt = oldest.checked_at;
-    if (lastDisconnectedAt === null && !oldest.is_online) lastDisconnectedAt = oldest.checked_at;
     return { lastConnectedAt, lastDisconnectedAt };
 }
 
