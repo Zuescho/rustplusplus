@@ -23,6 +23,70 @@ const Path = require('path');
 
 const Client = require('../../index.ts');
 
+/* Debounced write queue for instance files.
+
+   The bot's persistence pattern is "mutate the in-memory instance object and
+   call setInstance()" — and a single poll cycle can trigger dozens of those
+   calls, each toggling a single boolean. Previously every call re-serialized
+   the whole guild state and fsynced it to disk synchronously, which was the
+   hot path that dominated CPU and disk on busy guilds.
+
+   The same in-memory object reference is shared between callers and the queue,
+   so when we eventually flush we always see the latest mutations regardless of
+   how many setInstance calls happened in between. */
+const WRITE_DEBOUNCE_MS = 250;
+const _pending = new Map(); /* guildId -> { instance, timer } */
+
+function _instancePath(guildId) {
+    return Path.join(__dirname, '..', '..', 'instances', `${guildId}.json`);
+}
+
+function _flushOne(guildId) {
+    const entry = _pending.get(guildId);
+    if (!entry) return;
+    if (entry.timer) clearTimeout(entry.timer);
+    _pending.delete(guildId);
+
+    const targetPath = _instancePath(guildId);
+    const tempPath = targetPath + '.tmp';
+
+    /* Compact JSON — pretty-printing roughly doubles size and slows
+       serialization for no end-user benefit (operators can pretty-print
+       on demand). Atomic rename still gives crash consistency at the FS
+       level; we deliberately don't fsync per write — the cost isn't worth
+       the durability gain for a chat bot. */
+    const data = JSON.stringify(entry.instance);
+    try {
+        Fs.writeFileSync(tempPath, data, 'utf8');
+        Fs.renameSync(tempPath, targetPath);
+    }
+    catch (error) {
+        console.error(`Failed to write instance file ${targetPath}:`, error);
+        try { Fs.unlinkSync(tempPath); } catch { /* ignore */ }
+        throw error;
+    }
+}
+
+function _flushAll() {
+    for (const guildId of Array.from(_pending.keys())) {
+        try { _flushOne(guildId); }
+        catch (e) { /* already logged */ }
+    }
+}
+
+/* Best-effort flush on shutdown so we don't lose the last <250ms of state.
+   These are idempotent and safe to register once at module load. */
+let _shutdownHooked = false;
+function _hookShutdown() {
+    if (_shutdownHooked) return;
+    _shutdownHooked = true;
+    const onExit = () => _flushAll();
+    process.on('exit', onExit);
+    process.on('SIGINT', () => { _flushAll(); process.exit(130); });
+    process.on('SIGTERM', () => { _flushAll(); process.exit(143); });
+}
+_hookShutdown();
+
 module.exports = {
     getSmartDevice: function (guildId, entityId) {
         /* Temporary function till discord modals gets more functional */
@@ -43,7 +107,11 @@ module.exports = {
     },
 
     readInstanceFile: function (guildId) {
-        const targetPath = Path.join(__dirname, '..', '..', 'instances', `${guildId}.json`);
+        /* If a write is pending for this guild, flush it first so the read
+           sees the latest committed state. */
+        if (_pending.has(guildId)) _flushOne(guildId);
+
+        const targetPath = _instancePath(guildId);
         const tempPath = targetPath + '.tmp';
         if (Fs.existsSync(tempPath)) {
             try {
@@ -53,28 +121,31 @@ module.exports = {
             }
         }
 
-        // Fahren Sie mit dem normalen Lesen fort
         return JSON.parse(Fs.readFileSync(targetPath, 'utf8'));
     },
 
     writeInstanceFile: function (guildId, instance) {
-        const targetPath = Path.join(__dirname, '..', '..', 'instances', `${guildId}.json`);
-        const tempPath = targetPath + '.tmp';
-        
-        const data = JSON.stringify(instance, null, 2);
-
-        Fs.writeFileSync(tempPath, data, 'utf8');
-        try {
-            const fd = Fs.openSync(tempPath, 'r+');
-            Fs.fsyncSync(fd);
-            Fs.closeSync(fd);
-        } catch (error) {
-            console.error(`Failed to sync file data: ${tempPath}:`, error);
-            Fs.unlinkSync(tempPath); 
-            throw error;
+        const existing = _pending.get(guildId);
+        if (existing) {
+            /* Replace the instance reference (latest wins) but let the
+               in-flight timer fire on its original schedule — we never want
+               writes to be starved by a steady stream of mutations. */
+            existing.instance = instance;
+            return;
         }
-        Fs.renameSync(tempPath, targetPath);
+        const timer = setTimeout(() => {
+            try { _flushOne(guildId); }
+            catch (e) { /* already logged */ }
+        }, WRITE_DEBOUNCE_MS);
+        if (timer.unref) timer.unref();
+        _pending.set(guildId, { instance, timer });
     },
+
+    flushInstanceFile: function (guildId) {
+        _flushOne(guildId);
+    },
+
+    flushAllInstanceFiles: _flushAll,
 
     readCredentialsFile: function (guildId) {
         const path = Path.join(__dirname, '..', '..', 'credentials', `${guildId}.json`);

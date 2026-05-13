@@ -45,7 +45,7 @@ class DiscordBot extends Discord.Client {
         this.fcmListenersLite = new Object();
         this.instances = {};
         this.enIntl = null;
-        this.enMessages = JSON.parse(Fs.readFileSync(Path.join(__dirname, '..', 'languages', 'en.json')), 'utf8');
+        this.enMessages = JSON.parse(Fs.readFileSync(Path.join(__dirname, '..', 'languages', 'en.json'), 'utf8'));
 
         this.rustplusInstances = new Object();
         this.activeRustplusInstances = new Object();
@@ -302,24 +302,19 @@ class DiscordBot extends Discord.Client {
 
     findAvailableTrackerId(guildId) {
         const instance = this.getInstance(guildId);
-
-        while (true) {
-            const randomNumber = Math.floor(Math.random() * 1000);
-            if (!instance.trackers.hasOwnProperty(randomNumber)) {
-                return randomNumber;
-            }
+        /* Scan sequentially so we never hang when many ids are taken. */
+        for (let i = 0; i < Number.MAX_SAFE_INTEGER; i++) {
+            if (!instance.trackers.hasOwnProperty(i)) return i;
         }
+        return 0;
     }
 
     findAvailableGroupId(guildId, serverId) {
         const instance = this.getInstance(guildId);
-
-        while (true) {
-            const randomNumber = Math.floor(Math.random() * 1000);
-            if (!instance.serverList[serverId].switchGroups.hasOwnProperty(randomNumber)) {
-                return randomNumber;
-            }
+        for (let i = 0; i < Number.MAX_SAFE_INTEGER; i++) {
+            if (!instance.serverList[serverId].switchGroups.hasOwnProperty(i)) return i;
         }
+        return 0;
     }
 
     /**

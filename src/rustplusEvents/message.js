@@ -105,14 +105,16 @@ async function messageBroadcastTeamMessage(rustplus, client, message) {
         return;
     }
 
-    if (rustplus.messagesSentByBot.includes(message.broadcast.teamMessage.message.message)) {
-        /* Remove message from messagesSendByBot */
-        for (let i = rustplus.messagesSentByBot.length - 1; i >= 0; i--) {
-            if (rustplus.messagesSentByBot[i] === message.broadcast.teamMessage.message.message) {
-                rustplus.messagesSentByBot.splice(i, 1);
-            }
+    {
+        /* Bot-echo dedupe: when the team chat sends back something the bot
+           just said, drop one occurrence (not all of them — otherwise a
+           bot line sent twice would suppress only the first echo and the
+           second would leak through as if it were a real player message). */
+        const echoIndex = rustplus.messagesSentByBot.indexOf(message.broadcast.teamMessage.message.message);
+        if (echoIndex !== -1) {
+            rustplus.messagesSentByBot.splice(echoIndex, 1);
+            return;
         }
-        return;
     }
 
     const isCommand = await CommandHandler.inGameCommandHandler(rustplus, client, message);

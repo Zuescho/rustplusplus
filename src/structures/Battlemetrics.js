@@ -476,6 +476,7 @@ class Battlemetrics {
      *  @return {Array} Array of wipe objects sorted by timestamp.
      */
     getUpcomingWipesOrderedByTime() {
+        const nowSec = Date.now() / 1000;
         const unordered = [];
         for (const wipe of this.rustWipes) {
             const timestampDate = new Date(wipe.timestamp);
@@ -483,6 +484,10 @@ class Battlemetrics {
             const timestampSplit = timestampDate.toISOString().split('T');
             wipe.readableTimestamp = timestampSplit.length === 2 ?
                 `${timestampSplit[0]} T ${timestampSplit[1]}` : timestampDate.toISOString();
+            /* Drop entries that have already passed — callers use the first
+               result of `.find(type === 'map')` etc, so a stale past wipe
+               would otherwise shadow the real next one. */
+            if (wipe.discordTimestamp <= nowSec) continue;
             unordered.push(wipe);
         }
         return unordered.sort(function (a, b) { return a.discordTimestamp - b.discordTimestamp; });
@@ -665,8 +670,8 @@ class Battlemetrics {
                 this.players[entity.id]['positiveMatch'] = entity.attributes.positiveMatch;
                 this.players[entity.id]['createdAt'] = entity.attributes.createdAt;
                 this.players[entity.id]['updatedAt'] = entity.attributes.updatedAt;
-                const firstTime = entity.meta.metadata.find(e => e.key === 'firstTime');
-                if (firstTime) this.players[entity.id]['firstTime'] = firstTime.value;
+                const firstTimeVar = entity.meta.metadata.find(e => e.key === 'firstTime');
+                if (firstTimeVar) this.players[entity.id]['firstTime'] = firstTimeVar.value;
 
                 /* Other */
                 this.players[entity.id]['url'] = this.GET_BATTLEMETRICS_PLAYER_URL(entity.id);
@@ -825,19 +830,6 @@ class Battlemetrics {
         return ordered.map(e => e[1]);
     }
 
-    /**
-     *  Get the offline time from a player.
-     *  @param {string} playerId The id of the player to get offline time from.
-     *  @return {Array} index 0: seconds offline, index 1: The formatted offline time of a player.
-     */
-    getOfflineTime(playerId) {
-        if (!this.lastUpdateSuccessful || !this.players.hasOwnProperty(playerId) ||
-            !this.players[playerId]['logoutDate']) {
-            return null;
-        }
-
-        return this.#formatTime(this.players[playerId]['logoutDate']);
-    }
 }
 
 module.exports = Battlemetrics;
