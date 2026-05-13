@@ -6,6 +6,13 @@
     folds the last 30 days into a (player, day-of-week, hour) grid of online
     percentages. Day-of-week and hour are computed in the bot's local TZ so the
     "active hours" hint matches the user's perception.
+
+    Data is keyed exclusively by BattleMetrics player_id, NOT tracker id. This
+    means moving or splitting a player across trackers preserves their entire
+    activity history automatically — the new tracker queries the same player_id
+    and gets the same data. Nothing in this module (or anywhere else in the
+    codebase) deletes activity rows when a player is removed from a tracker;
+    rows only roll off after `purgeOld` (default 30 days).
 */
 
 const Path = require('path');

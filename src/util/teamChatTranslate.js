@@ -11,6 +11,15 @@
     Google web endpoint, which is unreliable and frequently returns the
     source string unchanged.
 
+    Spam filters: messages from companion bots (e.g. "Boton") tend to be
+    short English status lines like "team member X is no longer AFK". They
+    pollute the translated channel because franc occasionally misdetects
+    them as non-English, OR they happen to be Spanish-tinted and pass
+    detection. Two layers handle this:
+      1) A hard-coded list of common bot-status patterns is skipped outright.
+      2) A rolling frequency window: any phrase seen ≥ REPEAT_THRESHOLD times
+         within REPEAT_WINDOW_MS is treated as a bot template.
+
     Results are cached briefly so two players echoing the same phrase don't
     cost two API calls.
 */
@@ -27,6 +36,26 @@ const MIN_LENGTH = 12;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX = 200;
 
+/* Frequency-based bot detection. A normalized phrase seen this many times
+   inside the window is considered a bot template and suppressed. */
+const REPEAT_WINDOW_MS = 60 * 60 * 1000; /* 1 hour */
+const REPEAT_THRESHOLD = 3;
+const REPEAT_CACHE_MAX = 500;
+
+/* Hard-coded bot-status patterns. These match the message body case-insensitively
+   after stripping the wildcard player name. Keep tight — false positives here
+   silently drop real team chat. */
+const BOT_STATUS_PATTERNS = [
+    /\bis (no longer|now) afk\b/i,
+    /\b(joined|left) the (team|group)\b/i,
+    /\bteam member .+ (is|has) /i,
+    /\b(just )?connected to the server\b/i,
+    /\b(just )?disconnected (from the server)?\b/i,
+    /\bwent (online|offline)\b/i,
+    /\bcame (online|offline)\b/i,
+    /\bis (online|offline) now\b/i,
+];
+
 /* Franc returns ISO-639-3; LibreTranslate expects ISO-639-1. Only the
    common-on-Rust languages we expect to actually see; anything not in this
    map falls through to LT's `source: "auto"` which does its own detection. */
@@ -38,7 +67,8 @@ const FRANC_TO_LT = {
     kor: 'ko', ara: 'ar', heb: 'he', tha: 'th', vie: 'vi', ind: 'id',
 };
 
-const _cache = new Map(); /* text -> { at, result } */
+const _cache = new Map(); /* normalized text -> { at, result } */
+const _phraseCounts = new Map(); /* fingerprint -> { hits: [ts, ts...] } */
 
 function _cacheGet(key) {
     const e = _cache.get(key);
@@ -52,7 +82,6 @@ function _cacheGet(key) {
 
 function _cacheSet(key, result) {
     if (_cache.size >= CACHE_MAX) {
-        /* Drop the oldest entry. Map preserves insertion order. */
         const oldestKey = _cache.keys().next().value;
         _cache.delete(oldestKey);
     }
@@ -67,6 +96,46 @@ function _normalize(text) {
         .replace(/<@!?\d+>/g, ' ')
         .replace(/[!@#$%^&*_=+`~]/g, ' ')
         .trim();
+}
+
+/* Collapse to a phrase fingerprint: lowercase, remove digits, collapse all
+   runs of word-chars that look like names (start with a capital letter in
+   original text but here we use a simpler shape: every token of length ≥ 3
+   gets stripped to its length bucket). The result is stable across messages
+   that differ only in the player-name slot. */
+function _fingerprint(text) {
+    return text
+        .toLowerCase()
+        .replace(/\d+/g, '#')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function _matchesBotPattern(text) {
+    for (const pat of BOT_STATUS_PATTERNS) {
+        if (pat.test(text)) return true;
+    }
+    return false;
+}
+
+/* Returns true if this phrase has been seen often enough recently to be
+   considered a bot template. Also records the current sighting. */
+function _isRepeatedTemplate(text) {
+    const fp = _fingerprint(text);
+    const now = Date.now();
+    let entry = _phraseCounts.get(fp);
+    if (!entry) {
+        if (_phraseCounts.size >= REPEAT_CACHE_MAX) {
+            const oldestKey = _phraseCounts.keys().next().value;
+            _phraseCounts.delete(oldestKey);
+        }
+        entry = { hits: [] };
+        _phraseCounts.set(fp, entry);
+    }
+    /* Drop stale timestamps before counting. */
+    entry.hits = entry.hits.filter(t => (now - t) <= REPEAT_WINDOW_MS);
+    entry.hits.push(now);
+    return entry.hits.length >= REPEAT_THRESHOLD;
 }
 
 async function _libreTranslate(text, detected) {
@@ -100,6 +169,22 @@ async function detectAndTranslate(text) {
     const cached = _cacheGet(clean);
     if (cached) return cached;
 
+    /* Hard-pattern filter first — independent of franc, so bot lines we
+       recognize get dropped even when detection mis-classifies them. */
+    if (_matchesBotPattern(clean)) {
+        const result = { shouldPost: false, reason: 'botPattern' };
+        _cacheSet(clean, result);
+        return result;
+    }
+
+    /* Frequency-based bot detection: any sentence repeated ≥3× per hour is
+       almost certainly a bot template (player-status announcements, etc.). */
+    if (_isRepeatedTemplate(clean)) {
+        const result = { shouldPost: false, reason: 'repeated' };
+        _cacheSet(clean, result);
+        return result;
+    }
+
     const detected = Franc(clean);
     if (detected === 'und') {
         const result = { shouldPost: false, detected };
@@ -125,18 +210,23 @@ async function detectAndTranslate(text) {
         return result;
     }
 
-    /* The free Google web endpoint occasionally returns the source string
-       unchanged (rate-limit, malformed HTML, etc). Franc already decided
-       this isn't English/German, so post the message anyway — but mark it
-       as unchanged so the reader knows the translator didn't do anything. */
-    const unchanged = translatedText
-        && translatedText.trim().toLowerCase() === text.trim().toLowerCase();
+    /* If the translator returned the source string unchanged it did not
+       actually translate (rate-limit, no-op, or trivial passthrough). The
+       reader gains nothing from seeing the same line echoed back in the
+       translated channel, so skip it. */
+    const unchanged = !translatedText
+        || translatedText.trim().toLowerCase() === text.trim().toLowerCase();
+
+    if (unchanged) {
+        const result = { shouldPost: false, detected, reason: 'unchanged', provider };
+        _cacheSet(clean, result);
+        return result;
+    }
 
     const result = {
         shouldPost: true,
-        translatedText: translatedText || text,
+        translatedText,
         detected,
-        unchanged,
         provider,
     };
     _cacheSet(clean, result);

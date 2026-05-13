@@ -191,7 +191,13 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
     if (active) {
         alarm.lastTrigger = Math.floor(new Date() / 1000);
         client.setInstance(rustplus.guildId, instance);
-        await DiscordMessages.sendSmartAlarmTriggerMessage(rustplus.guildId, serverId, entityId);
+
+        /* Event-tagged ("custom") alarms have their own dedicated channel and
+           explicitly should NOT @everyone or fire user mentions, so skip the
+           regular trigger broadcast that posts to the activity channel. */
+        if (!eventTag) {
+            await DiscordMessages.sendSmartAlarmTriggerMessage(rustplus.guildId, serverId, entityId);
+        }
 
         /* Suppress the legacy "{name}: {message}" in-game line when an event
            tag is set — the event-tagged path below produces a cleaner
@@ -216,9 +222,9 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
     }
 
     /* Event-tagged alarms emit BOTH start and stop notifications so a powered
-       in-game event (Large Excavator, Cargo Ship, etc.) shows up in the activity
-       channel and team chat at both edges. Untagged alarms keep the original
-       rising-edge-only behavior. */
+       in-game event (Large Excavator, Cargo Ship, etc.) shows up in the
+       dedicated custom-alarm channel at both edges. Untagged alarms keep the
+       original rising-edge-only behavior on the regular alarm path above. */
     if (eventTag) {
         const verb = active
             ? client.intlGet(rustplus.guildId, 'eventTagStartedVerb')
@@ -227,12 +233,13 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
             { tag: eventTag, verb });
         const color = active ? Constants.COLOR_ACTIVE : Constants.COLOR_INACTIVE;
 
-        await DiscordMessages.sendActivityNotificationMessage(
-            rustplus.guildId, serverId, color, eventText, null, alarm.server, alarm.everyone);
+        await DiscordMessages.sendCustomAlarmMessage(
+            rustplus.guildId, serverId, color, eventText, alarm.server);
 
-        /* Bypass the in-game mute, same as smart-alarm triggers do, so the
-           team always sees the start/stop in team chat. */
-        rustplus.sendInGameMessage(eventText, true);
+        /* Respect the in-game mute setting — custom alarms are intentionally
+           lower-priority than regular smart alarms (no @everyone, dedicated
+           channel) so they don't bypass mute either. */
+        rustplus.sendInGameMessage(eventText);
     }
 
     DiscordMessages.sendSmartAlarmMessage(rustplus.guildId, rustplus.serverId, entityId);

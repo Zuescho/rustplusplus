@@ -159,8 +159,23 @@ module.exports = {
         const successful = bmInstance && bmInstance.lastUpdateSuccessful ? true : false;
 
         const battlemetricsLink = `[${battlemetricsId}](${Constants.BATTLEMETRICS_SERVER_URL}${battlemetricsId})`;
+
+        /* Count how many tracked players are online right now, and use that to
+           drive the "Server Status" light: green if anyone in the group is in
+           the server, red if the whole group is offline. This is more useful
+           than reflecting the raw server up/down state, which is rarely the
+           thing you care about when watching a tracker. */
+        let onlineCount = 0;
+        const totalCount = tracker.players.length;
+        if (successful) {
+            for (const p of tracker.players) {
+                if (!p.playerId) continue;
+                const bmPlayer = bmInstance.players[p.playerId];
+                if (bmPlayer && bmPlayer.status) onlineCount += 1;
+            }
+        }
         const serverStatus = !successful ? Constants.NOT_FOUND_EMOJI :
-            (bmInstance.server_status ? Constants.ONLINE_EMOJI : Constants.OFFLINE_EMOJI);
+            (onlineCount > 0 ? Constants.ONLINE_EMOJI : Constants.OFFLINE_EMOJI);
 
         let description = `__**Battlemetrics ID:**__ ${battlemetricsLink}\n`;
         description += `__**${Client.client.intlGet(guildId, 'serverId')}:**__ ${tracker.serverId}\n`;
@@ -168,8 +183,7 @@ module.exports = {
         description += `__**${Client.client.intlGet(guildId, 'streamerMode')}:**__ `;
         description += (!bmInstance ? Constants.NOT_FOUND_EMOJI : (bmInstance.streamerMode ?
             Client.client.intlGet(guildId, 'onCap') : Client.client.intlGet(guildId, 'offCap'))) + '\n';
-        description += `__**${Client.client.intlGet(guildId, 'clanTag')}:**__ `;
-        description += tracker.clanTag !== '' ? `\`${tracker.clanTag}\`` : '';
+        description += `__**${Client.client.intlGet(guildId, 'groupOnline')}:**__ ${onlineCount}/${totalCount}`;
 
         /* Group active-hours hint (averaged across all players with enough samples). */
         const groupPlayerIds = tracker.players.map(p => p.playerId).filter(Boolean);

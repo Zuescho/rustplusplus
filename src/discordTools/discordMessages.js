@@ -356,6 +356,22 @@ module.exports = {
         await module.exports.sendMessage(guildId, content, null, instance.channelId.events);
     },
 
+    /* Dedicated channel for event-tagged ("custom") alarms — e.g. Large Excavator,
+       Cargo Ship. Intentionally never mentions @everyone or the configured
+       notify-user list, so it stays low-noise compared to the regular activity
+       channel. */
+    sendCustomAlarmMessage: async function (guildId, serverId, color, text, title = null) {
+        const instance = Client.client.getInstance(guildId);
+        const channelId = instance.channelId.customAlarm || instance.channelId.activity;
+        if (!channelId) return;
+
+        const content = {
+            embeds: [DiscordEmbeds.getActivityNotificationEmbed(guildId, serverId, color, text, null, null, title)]
+        };
+
+        await module.exports.sendMessage(guildId, content, null, channelId);
+    },
+
     sendActivityNotificationMessage: async function (guildId, serverId, color, text, steamId, title = null, everyone = false) {
         const instance = Client.client.getInstance(guildId);
 
@@ -396,7 +412,7 @@ module.exports = {
         await module.exports.sendMessage(guildId, content, null, instance.channelId.teamchat);
     },
 
-    sendTeamChatTranslatedMessage: async function (guildId, message, translatedText, detectedLang, unchanged = false) {
+    sendTeamChatTranslatedMessage: async function (guildId, message, translatedText, detectedLang) {
         const instance = Client.client.getInstance(guildId);
         if (!instance.channelId.teamchatTranslated) return;
 
@@ -405,7 +421,7 @@ module.exports = {
             color = instance.teamChatColors[message.steamId];
         }
 
-        const langTag = detectedLang ? ` (${detectedLang} → en${unchanged ? ', translator no-op' : ''})` : '';
+        const langTag = detectedLang ? ` (${detectedLang} → en)` : '';
         const description = `**${message.name}**${langTag}\n${translatedText}\n> ${message.message}`;
 
         const content = {
