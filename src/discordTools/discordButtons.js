@@ -467,6 +467,11 @@ module.exports = {
                     customId: `TrackerUpdate${identifier}`,
                     label: Client.client.intlGet(guildId, 'updateCap'),
                     style: PRIMARY
+                }),
+                module.exports.getButton({
+                    customId: `TrackerActivityReport${identifier}`,
+                    label: '📋 REPORT',
+                    style: PRIMARY
                 }))
         ];
     },

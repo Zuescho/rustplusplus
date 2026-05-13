@@ -231,8 +231,9 @@ module.exports = {
                     status += `${Constants.OFFLINE_EMOJI}`;
                 }
                 status += time !== null ? ` [${time[1]}]` : '';
-                const activeHint = ActivityDb.getPlayerActiveHint(player.playerId);
-                if (activeHint) status += ` ${activeHint}`;
+                /* Per-player active-hours hint moved to the Report button —
+                   the inline tracker UI now only shows the group-level
+                   typical-play window so the list stays scannable. */
                 status += '\n';
             }
 
@@ -1113,5 +1114,102 @@ module.exports = {
             color: Constants.COLOR_DEFAULT,
             timestamp: true
         });
+    },
+
+    /* Per-tracker activity report. Adapted from upstream's per-player
+       login/logout-event flavor to work with our snapshot+pattern SQLite
+       schema, so no migration of stored data is required. */
+    getTrackerActivityReportEmbed: function (guildId, trackerId) {
+        const instance = Client.client.getInstance(guildId);
+        const tracker = instance.trackers[trackerId];
+        const bmInstance = Client.client.battlemetricsInstances[tracker.battlemetricsId];
+
+        let description = `__**${Client.client.intlGet(guildId, 'tracker')}:**__ ${tracker.name}\n`;
+        description += `__**${Client.client.intlGet(guildId, 'serverId')}:**__ ${tracker.serverId}\n\n`;
+
+        const fmtAbsRel = (sec) => sec
+            ? `<t:${sec}:f> (<t:${sec}:R>)`
+            : 'Never';
+
+        let totalCharacters = description.length + 200;
+
+        for (const player of tracker.players) {
+            if (!player.playerId) continue;
+            const live = bmInstance && bmInstance.players ? bmInstance.players[player.playerId] : null;
+            const report = ActivityDb.generatePlayerReport(player.playerId, player.name || '-', live);
+            const statusEmoji = report.isOnline ? Constants.ONLINE_EMOJI : Constants.OFFLINE_EMOJI;
+
+            let block = `${statusEmoji} **${report.playerName}**\n`;
+            if (report.sampleCount === 0) {
+                block += `> No activity data recorded yet.\n\n`;
+            }
+            else {
+                const pct24h = ActivityDb.formatPercentage(report.stats24h.onlineSec, report.stats24h.totalSec);
+                const pct7d = ActivityDb.formatPercentage(report.stats7d.onlineSec, report.stats7d.totalSec);
+                block += `> ⏱ **24h:** ${ActivityDb.formatDurationSec(report.stats24h.onlineSec)} (${pct24h})\n`;
+                block += `> 📅 **7d:** ${ActivityDb.formatDurationSec(report.stats7d.onlineSec)} (${pct7d})\n`;
+                block += `> 📆 **30d:** ${ActivityDb.formatDurationSec(report.stats30d.onlineSec)}\n`;
+                block += `> 🔄 **Sessions (7d):** ${report.stats7d.sessions}\n`;
+                block += `> 🔗 **Last connected:** ${fmtAbsRel(report.lastConnectedSec)}\n`;
+                block += `> 🛑 **Last disconnected:** ${fmtAbsRel(report.lastDisconnectedSec)}\n`;
+                block += `> 👁 **Last seen:** ${fmtAbsRel(report.lastSeenSec)}\n`;
+                block += `> 💤 **Likely sleep:** ${report.sleepWindow}\n`;
+                block += `> 🎮 **Likely playing:** ${report.playWindow}\n`;
+                if (report.peakHours.length > 0) {
+                    const peakStr = report.peakHours
+                        .map(h => `${String(h.hour).padStart(2, '0')}:00`)
+                        .join(', ');
+                    block += `> 🔥 **Peak hours:** ${peakStr}\n`;
+                }
+                block += '\n';
+            }
+
+            /* Stop adding players once we're near Discord's 6000-char total
+               limit — the alternative (silently dropping fields) would be
+               worse for the reader than a clear cutoff. */
+            if (totalCharacters + block.length > Constants.EMBED_MAX_TOTAL_CHARACTERS - 200) break;
+            totalCharacters += block.length;
+            description += block;
+        }
+
+        /* Today's hourly chart for the first player that has data; split
+           into two side-by-side inline fields (12 hours each) so it
+           renders as a readable two-column layout in the embed. */
+        const fields = [];
+        for (const player of tracker.players) {
+            if (!player.playerId) continue;
+            const hours = ActivityDb.getHourlyMinutes(player.playerId, 24 * 60 * 60);
+            const anyData = hours.some(v => v > 0);
+            if (!anyData) continue;
+            const chart = ActivityDb.formatHourlyChart(hours);
+            const lines = chart.split('\n').filter(l => l.length > 0);
+            const firstHalf = lines.slice(0, 12).join('\n');
+            const secondHalf = lines.slice(12).join('\n');
+            if (firstHalf.length <= Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS &&
+                secondHalf.length <= Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS) {
+                fields.push({
+                    name: `📊 Today's Hourly Activity: ${player.name || '-'}`,
+                    value: firstHalf || '​',
+                    inline: true
+                });
+                fields.push({
+                    name: '​',
+                    value: secondHalf || '​',
+                    inline: true
+                });
+            }
+            break;
+        }
+
+        const embed = module.exports.getEmbed({
+            title: `📋 Activity Report`,
+            color: Constants.COLOR_DEFAULT,
+            description: description,
+            thumbnail: `${tracker.img}`,
+            footer: { text: `${tracker.title} | ${tracker.players.length} player(s)` },
+            timestamp: true
+        });
+        if (fields.length > 0) embed.addFields(...fields);
+        return embed;
     },
 }

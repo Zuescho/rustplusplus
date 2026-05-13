@@ -21,6 +21,7 @@
 const Discord = require('discord.js');
 
 const Config = require('../../config');
+const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const SmartSwitchGroupHandler = require('./smartSwitchGroupHandler.js');
@@ -1148,6 +1149,31 @@ module.exports = async (client, interaction) => {
 
         const modal = DiscordModals.getTrackerRemovePlayerModal(guildId, ids.trackerId);
         await interaction.showModal(modal);
+    }
+    else if (interaction.customId.startsWith('TrackerActivityReport')) {
+        const ids = JSON.parse(interaction.customId.replace('TrackerActivityReport', ''));
+        const tracker = instance.trackers[ids.trackerId];
+
+        if (!tracker) {
+            await interaction.message.delete();
+            return;
+        }
+
+        /* Generating the report touches SQLite per-player (a handful of
+           small reads); always defer first so the click acks within
+           Discord's 3-second budget regardless of player count. */
+        try { await interaction.deferReply({ ephemeral: true }); } catch { /* already acked */ }
+        try {
+            const embed = DiscordEmbeds.getTrackerActivityReportEmbed(guildId, ids.trackerId);
+            await client.interactionEditReply(interaction, { embeds: [embed] });
+        }
+        catch (e) {
+            client.log(client.intlGet(null, 'errorCap'),
+                `TrackerActivityReport failed: ${e.message}`, 'error');
+            await client.interactionEditReply(interaction, {
+                content: 'Failed to generate the activity report. See logs.',
+            });
+        }
     }
     else if (interaction.customId.startsWith('TrackerInGame')) {
         const ids = JSON.parse(interaction.customId.replace('TrackerInGame', ''));
