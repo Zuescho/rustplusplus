@@ -217,6 +217,24 @@ module.exports = async (client, interaction) => {
                 instance.generalSettings.smartAlarmNotifyInGame)]
         });
     }
+    else if (interaction.customId === 'CustomAlarmBypassMute') {
+        instance.generalSettings.customAlarmBypassMute = !instance.generalSettings.customAlarmBypassMute;
+        client.setInstance(guildId, instance);
+
+        if (rustplus) rustplus.generalSettings.customAlarmBypassMute =
+            instance.generalSettings.customAlarmBypassMute;
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `${instance.generalSettings.customAlarmBypassMute}`
+        }));
+
+        await client.interactionUpdate(interaction, {
+            components: [DiscordButtons.getCustomAlarmBypassMuteButton(
+                guildId,
+                instance.generalSettings.customAlarmBypassMute)]
+        });
+    }
     else if (interaction.customId === 'SmartSwitchNotifyInGameWhenChangedFromDiscord') {
         instance.generalSettings.smartSwitchNotifyInGameWhenChangedFromDiscord =
             !instance.generalSettings.smartSwitchNotifyInGameWhenChangedFromDiscord;

@@ -238,10 +238,11 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
         await DiscordMessages.sendCustomAlarmMessage(
             rustplus.guildId, serverId, color, eventText, alarm.server);
 
-        /* Respect the in-game mute setting — custom alarms are intentionally
+        /* By default custom alarms respect the in-game bot mute — they're
            lower-priority than regular smart alarms (no @everyone, dedicated
-           channel) so they don't bypass mute either. */
-        rustplus.sendInGameMessage(eventText);
+           channel). The customAlarmBypassMute setting opts in to the same
+           force-send behavior smart-alarm/raid-alarm triggers use. */
+        rustplus.sendInGameMessage(eventText, rustplus.generalSettings.customAlarmBypassMute === true);
     }
 
     DiscordMessages.sendSmartAlarmMessage(rustplus.guildId, rustplus.serverId, entityId);
