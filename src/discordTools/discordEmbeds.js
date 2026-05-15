@@ -1144,12 +1144,6 @@ module.exports = {
                 block += `> No activity data recorded yet.\n\n`;
             }
             else {
-                const pct24h = ActivityDb.formatPercentage(report.stats24h.onlineSec, report.stats24h.totalSec);
-                const pct7d = ActivityDb.formatPercentage(report.stats7d.onlineSec, report.stats7d.totalSec);
-                block += `> ⏱ **24h:** ${ActivityDb.formatDurationSec(report.stats24h.onlineSec)} (${pct24h})\n`;
-                block += `> 📅 **7d:** ${ActivityDb.formatDurationSec(report.stats7d.onlineSec)} (${pct7d})\n`;
-                block += `> 📆 **30d:** ${ActivityDb.formatDurationSec(report.stats30d.onlineSec)}\n`;
-                block += `> 🔄 **Sessions (7d):** ${report.stats7d.sessions}\n`;
                 block += `> 🔗 **Last connected:** ${fmtAbsRel(report.lastConnectedSec)}\n`;
                 block += `> 🛑 **Last disconnected:** ${fmtAbsRel(report.lastDisconnectedSec)}\n`;
                 block += `> 👁 **Last seen:** ${fmtAbsRel(report.lastSeenSec)}\n`;
@@ -1172,33 +1166,19 @@ module.exports = {
             description += block;
         }
 
-        /* Today's hourly chart for the first player that has data; split
-           into two side-by-side inline fields (12 hours each) so it
-           renders as a readable two-column layout in the embed. */
+        /* Group weekly activity: per-weekday averaged online windows across
+           all tracked players. Replaces the per-player hourly chart so the
+           report leads with "when is this group usually online" rather than
+           a snapshot of one player's day. */
         const fields = [];
-        for (const player of tracker.players) {
-            if (!player.playerId) continue;
-            const hours = ActivityDb.getHourlyMinutes(player.playerId, 24 * 60 * 60);
-            const anyData = hours.some(v => v > 0);
-            if (!anyData) continue;
-            const chart = ActivityDb.formatHourlyChart(hours);
-            const lines = chart.split('\n').filter(l => l.length > 0);
-            const firstHalf = lines.slice(0, 12).join('\n');
-            const secondHalf = lines.slice(12).join('\n');
-            if (firstHalf.length <= Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS &&
-                secondHalf.length <= Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS) {
-                fields.push({
-                    name: `📊 Today's Hourly Activity: ${player.name || '-'}`,
-                    value: firstHalf || '​',
-                    inline: true
-                });
-                fields.push({
-                    name: '​',
-                    value: secondHalf || '​',
-                    inline: true
-                });
-            }
-            break;
+        const groupPlayerIds = tracker.players.map(p => p.playerId).filter(Boolean);
+        const weeklyValue = ActivityDb.formatGroupWeeklySchedule(groupPlayerIds);
+        if (weeklyValue && weeklyValue.length <= Constants.EMBED_MAX_FIELD_VALUE_CHARACTERS) {
+            fields.push({
+                name: `🗓 ${Client.client.intlGet(guildId, 'groupActive')} (weekly)`,
+                value: weeklyValue,
+                inline: false
+            });
         }
 
         const embed = module.exports.getEmbed({

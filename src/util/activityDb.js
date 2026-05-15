@@ -336,64 +336,8 @@ function setLastAlertAt(trackerId, ts) {
 
 /* Report builders.
 
-   Our schema is per-poll snapshots (activity_log rows are "is the player
-   online right now?" sampled every BM_POLL_SECONDS). All the report metrics
-   are derived from that: count the online rows × poll interval for time,
-   count 0→1 transitions for sessions, bucket by local hour-of-day for the
-   activity chart. We keep activity in SQLite — the tracker player object
-   stores no per-player log. */
-const BM_POLL_SECONDS = 60;
-const DAY_SECONDS = 24 * 60 * 60;
-
-function _windowStartSec(windowSec) {
-    return Math.floor(Date.now() / 1000) - windowSec;
-}
-
-/* Total online / total sample seconds within a rolling window, plus the
-   number of distinct sessions (0→1 transitions). Sessions counts the first
-   sample too if it's already online, so a player who never logged off in
-   the window still reads as 1 session. */
-function getReportStats(playerId, windowSec) {
-    if (!isAvailable()) return { onlineSec: 0, totalSec: 0, sessions: 0 };
-    const cutoff = _windowStartSec(windowSec);
-    const rows = db.prepare(
-        'SELECT is_online FROM activity_log WHERE player_id = ? AND checked_at >= ? ORDER BY checked_at ASC'
-    ).all(String(playerId), cutoff);
-    if (rows.length === 0) return { onlineSec: 0, totalSec: 0, sessions: 0 };
-
-    let onlineCount = 0;
-    let sessions = 0;
-    let prev = 0;
-    for (let i = 0; i < rows.length; i++) {
-        const cur = rows[i].is_online ? 1 : 0;
-        if (cur === 1) onlineCount += 1;
-        if (i === 0 ? cur === 1 : (prev === 0 && cur === 1)) sessions += 1;
-        prev = cur;
-    }
-    return {
-        onlineSec: onlineCount * BM_POLL_SECONDS,
-        totalSec: rows.length * BM_POLL_SECONDS,
-        sessions,
-    };
-}
-
-/* Minutes online per local hour-of-day across the window. Each `is_online=1`
-   sample contributes BM_POLL_SECONDS/60 minutes to the hour bucket of its
-   timestamp's local hour. Returns Array(24). */
-function getHourlyMinutes(playerId, windowSec) {
-    const hours = new Array(24).fill(0);
-    if (!isAvailable()) return hours;
-    const cutoff = _windowStartSec(windowSec);
-    const rows = db.prepare(
-        'SELECT is_online, checked_at FROM activity_log WHERE player_id = ? AND checked_at >= ? AND is_online = 1'
-    ).all(String(playerId), cutoff);
-    const minutesPerSample = BM_POLL_SECONDS / 60;
-    for (const r of rows) {
-        const h = new Date(r.checked_at * 1000).getHours();
-        hours[h] += minutesPerSample;
-    }
-    return hours;
-}
+   Driven entirely off the aggregated (player, dow, hour) pattern grid plus
+   the activity_log transitions — no per-window rollups, no hourly chart. */
 
 /* Most recent online→offline and offline→online transitions, returned as
    unix seconds (or null if never observed in our retained history). Scans
@@ -514,42 +458,11 @@ function getPeakHours(playerId, topN = 3) {
     return ranked.filter(e => e.pct > 0).slice(0, topN);
 }
 
-/* Render the 24-bar hourly chart used in the report embed. Mirrors the
-   upstream char ramp so the report looks consistent for users who've
-   seen this feature before. Returns a multi-line string. */
-function formatHourlyChart(hours) {
-    const maxMinutes = Math.max(...hours, 1);
-    const ramp = ['░', '▒', '▓', '█'];
-    let out = '';
-    for (let h = 0; h < 24; h++) {
-        const ratio = hours[h] / maxMinutes;
-        const filled = Math.round(ratio * 8);
-        let bar = '';
-        for (let b = 0; b < 8; b++) {
-            if (b < filled) {
-                if (ratio > 0.75) bar += ramp[3];
-                else if (ratio > 0.50) bar += ramp[2];
-                else if (ratio > 0.25) bar += ramp[1];
-                else bar += ramp[0];
-            }
-            else bar += '░';
-        }
-        const mins = Math.round(hours[h]);
-        out += `\`${String(h).padStart(2, '0')}:00\` ${bar}${mins > 0 ? ` ${mins}m` : ''}\n`;
-    }
-    return out;
-}
-
 /* Compose everything into a single per-player report object. `live` is
    optional: if a BattleMetrics instance entry for this player is passed in,
    we trust its `status`/`updatedAt`/`logoutDate` for the live verdict
    instead of the (slower, polled) SQL state. */
 function generatePlayerReport(playerId, displayName, live = null) {
-    const stats24h = getReportStats(playerId, DAY_SECONDS);
-    const stats7d = getReportStats(playerId, 7 * DAY_SECONDS);
-    const stats30d = getReportStats(playerId, 30 * DAY_SECONDS);
-    const hourly7d = getHourlyMinutes(playerId, 7 * DAY_SECONDS);
-    const hourlyToday = getHourlyMinutes(playerId, DAY_SECONDS);
     const { sleepWindow, playWindow } = _summariseDailyWindows(playerId);
     const peakHours = getPeakHours(playerId, 3);
     const transitions = getLastTransitions(playerId);
@@ -581,34 +494,38 @@ function generatePlayerReport(playerId, displayName, live = null) {
         lastDisconnectedSec,
         sleepWindow,
         playWindow,
-        stats24h,
-        stats7d,
-        stats30d,
-        hourly7d,
-        hourlyToday,
         peakHours,
         sampleCount,
     };
 }
 
-function formatPercentage(onlineSec, totalSec) {
-    if (totalSec === 0) return '0%';
-    return `${Math.round((onlineSec / totalSec) * 100)}%`;
+/* Per-weekday active windows for the whole tracker group. Same threshold and
+   sample-eligibility rules as getGroupActiveHint, but returns all seven days
+   in Mon→Sun order so the embed can show explicit per-day rows without the
+   "collapse identical days" behavior the hint uses. Days with no qualifying
+   range get an empty `ranges` array. */
+function getGroupWeeklySchedule(playerIds, options = {}) {
+    const threshold = options.threshold ?? 15;
+    const minSamples = options.minSamples ?? 200;
+    if (playerIds.length === 0) return [];
+    const eligible = playerIds.filter(p => getSampleCount(p) >= minSamples);
+    if (eligible.length === 0) return [];
+
+    const grid = getGroupGrid(eligible);
+    const perDay = summarizeWindowsWeekly(grid, threshold);
+
+    const order = [1, 2, 3, 4, 5, 6, 0];
+    return order.map(dow => ({ day: DAY_NAMES[dow], ranges: perDay[dow] }));
 }
 
-/* Compact "1d 5h 23m" / "47m" / "12s" rendering for a duration in seconds.
-   Drops trailing zero units so the output stays readable in narrow embed
-   fields. */
-function formatDurationSec(sec) {
-    if (sec <= 0) return '0m';
-    const d = Math.floor(sec / 86400);
-    const h = Math.floor((sec % 86400) / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const parts = [];
-    if (d > 0) parts.push(`${d}d`);
-    if (h > 0) parts.push(`${h}h`);
-    if (m > 0 || parts.length === 0) parts.push(`${m}m`);
-    return parts.join(' ');
+/* Render the schedule as a multi-line string suitable for an embed field.
+   Returns '' when no day in the week meets the activity threshold. */
+function formatGroupWeeklySchedule(playerIds, options = {}) {
+    const schedule = getGroupWeeklySchedule(playerIds, options);
+    if (schedule.length === 0) return '';
+    const active = schedule.filter(d => d.ranges.length > 0);
+    if (active.length === 0) return '';
+    return active.map(d => `\`${d.day}\` ~${formatRanges(d.ranges)}`).join('\n');
 }
 
 module.exports = {
@@ -624,14 +541,10 @@ module.exports = {
     getLastAlertAt,
     setLastAlertAt,
     /* Report builders */
-    getReportStats,
-    getHourlyMinutes,
     getLastTransitions,
     getPeakHours,
-    formatHourlyChart,
     generatePlayerReport,
-    formatPercentage,
-    formatDurationSec,
-    BM_POLL_SECONDS,
+    getGroupWeeklySchedule,
+    formatGroupWeeklySchedule,
     DAY_NAMES,
 };
