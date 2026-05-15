@@ -160,6 +160,18 @@ async function setupGeneralSettings(client, guildId, channel) {
     await client.messageSend(channel, {
         embeds: [DiscordEmbeds.getEmbed({
             color: Constants.COLOR_SETTINGS,
+            title: client.intlGet(guildId, 'shouldSmartAlarmBypassMuteSetting'),
+            thumbnail: `attachment://settings_logo.png`,
+        })],
+        components: [DiscordButtons.getSmartAlarmBypassMuteButton(guildId,
+            instance.generalSettings.smartAlarmBypassMute !== false)],
+        files: [new Discord.AttachmentBuilder(
+            Path.join(__dirname, '..', 'resources/images/settings_logo.png'))]
+    });
+
+    await client.messageSend(channel, {
+        embeds: [DiscordEmbeds.getEmbed({
+            color: Constants.COLOR_SETTINGS,
             title: client.intlGet(guildId, 'shouldCustomAlarmBypassMuteSetting'),
             thumbnail: `attachment://settings_logo.png`,
         })],
@@ -177,6 +189,18 @@ async function setupGeneralSettings(client, guildId, channel) {
         })],
         components: [DiscordButtons.getSmartSwitchNotifyInGameWhenChangedFromDiscordButton(guildId,
             instance.generalSettings.smartSwitchNotifyInGameWhenChangedFromDiscord)],
+        files: [new Discord.AttachmentBuilder(
+            Path.join(__dirname, '..', 'resources/images/settings_logo.png'))]
+    });
+
+    await client.messageSend(channel, {
+        embeds: [DiscordEmbeds.getEmbed({
+            color: Constants.COLOR_SETTINGS,
+            title: client.intlGet(guildId, 'shouldSmartSwitchBypassMuteSetting'),
+            thumbnail: `attachment://settings_logo.png`,
+        })],
+        components: [DiscordButtons.getSmartSwitchBypassMuteButton(guildId,
+            instance.generalSettings.smartSwitchBypassMute !== false)],
         files: [new Discord.AttachmentBuilder(
             Path.join(__dirname, '..', 'resources/images/settings_logo.png'))]
     });

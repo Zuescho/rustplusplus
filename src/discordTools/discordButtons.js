@@ -387,6 +387,28 @@ module.exports = {
             }));
     },
 
+    getSmartAlarmBypassMuteButton: function (guildId, enabled) {
+        return new Discord.ActionRowBuilder().addComponents(
+            module.exports.getButton({
+                customId: 'SmartAlarmBypassMute',
+                label: enabled ?
+                    Client.client.intlGet(guildId, 'enabledCap') :
+                    Client.client.intlGet(guildId, 'disabledCap'),
+                style: enabled ? SUCCESS : DANGER
+            }));
+    },
+
+    getSmartSwitchBypassMuteButton: function (guildId, enabled) {
+        return new Discord.ActionRowBuilder().addComponents(
+            module.exports.getButton({
+                customId: 'SmartSwitchBypassMute',
+                label: enabled ?
+                    Client.client.intlGet(guildId, 'enabledCap') :
+                    Client.client.intlGet(guildId, 'disabledCap'),
+                style: enabled ? SUCCESS : DANGER
+            }));
+    },
+
     getSmartSwitchNotifyInGameWhenChangedFromDiscordButton: function (guildId, enabled) {
         return new Discord.ActionRowBuilder().addComponents(
             module.exports.getButton({

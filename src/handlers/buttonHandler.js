@@ -235,6 +235,47 @@ module.exports = async (client, interaction) => {
                 instance.generalSettings.customAlarmBypassMute)]
         });
     }
+    else if (interaction.customId === 'SmartAlarmBypassMute') {
+        /* Default-true setting: normalize via `!== false` before negating so a
+           legacy instance with the field absent toggles to the opposite of the
+           displayed state instead of always landing on `true` first. */
+        const current = instance.generalSettings.smartAlarmBypassMute !== false;
+        instance.generalSettings.smartAlarmBypassMute = !current;
+        client.setInstance(guildId, instance);
+
+        if (rustplus) rustplus.generalSettings.smartAlarmBypassMute =
+            instance.generalSettings.smartAlarmBypassMute;
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `${instance.generalSettings.smartAlarmBypassMute}`
+        }));
+
+        await client.interactionUpdate(interaction, {
+            components: [DiscordButtons.getSmartAlarmBypassMuteButton(
+                guildId,
+                instance.generalSettings.smartAlarmBypassMute)]
+        });
+    }
+    else if (interaction.customId === 'SmartSwitchBypassMute') {
+        const current = instance.generalSettings.smartSwitchBypassMute !== false;
+        instance.generalSettings.smartSwitchBypassMute = !current;
+        client.setInstance(guildId, instance);
+
+        if (rustplus) rustplus.generalSettings.smartSwitchBypassMute =
+            instance.generalSettings.smartSwitchBypassMute;
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `${instance.generalSettings.smartSwitchBypassMute}`
+        }));
+
+        await client.interactionUpdate(interaction, {
+            components: [DiscordButtons.getSmartSwitchBypassMuteButton(
+                guildId,
+                instance.generalSettings.smartSwitchBypassMute)]
+        });
+    }
     else if (interaction.customId === 'SmartSwitchNotifyInGameWhenChangedFromDiscord') {
         instance.generalSettings.smartSwitchNotifyInGameWhenChangedFromDiscord =
             !instance.generalSettings.smartSwitchNotifyInGameWhenChangedFromDiscord;
@@ -703,7 +744,7 @@ module.exports = async (client, interaction) => {
                 status: status
             });
 
-            await rustplus.sendInGameMessage(str, true);
+            await rustplus.sendInGameMessage(str, rustplus.generalSettings.smartSwitchBypassMute !== false);
         }
 
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
@@ -975,7 +1016,7 @@ module.exports = async (client, interaction) => {
                         status: status
                     });
 
-                    await rustplus.sendInGameMessage(str, true);
+                    await rustplus.sendInGameMessage(str, rustplus.generalSettings.smartSwitchBypassMute !== false);
                 }
 
                 client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {

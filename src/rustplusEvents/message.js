@@ -205,7 +205,8 @@ async function messageBroadcastEntityChangedSmartAlarm(rustplus, client, message
            tag is set — the event-tagged path below produces a cleaner
            "{tag} started" message; firing both is duplicate noise. */
         if (instance.generalSettings.smartAlarmNotifyInGame && !eventTag) {
-            rustplus.sendInGameMessage(`${alarm.name}: ${alarm.message}`, true);
+            rustplus.sendInGameMessage(`${alarm.name}: ${alarm.message}`,
+                rustplus.generalSettings.smartAlarmBypassMute !== false);
         }
 
         for (const [groupId, group] of Object.entries(server.switchGroups)) {
