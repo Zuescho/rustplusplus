@@ -271,38 +271,46 @@ function getGroupGrid(playerIds) {
     return grid;
 }
 
+/* Compact one-line "when is this group online" hint shown inline on the
+   tracker embed. Averages the group's (dow, hour) grid across all seven
+   days into a single 24-hour profile, then emits contiguous active hour
+   ranges as "~HH–HH daily". The per-weekday breakdown lives on the
+   Report embed via formatGroupWeeklySchedule — this stays one line. */
 function getGroupActiveHint(playerIds, options = {}) {
     const threshold = options.threshold ?? 15;
     if (playerIds.length === 0) return '';
-    /* Require at least one player with enough samples. */
     const minSamples = options.minSamples ?? 200;
     const eligible = playerIds.filter(p => getSampleCount(p) >= minSamples);
     if (eligible.length === 0) return '';
 
     const grid = getGroupGrid(eligible);
-    const perDay = summarizeWindowsWeekly(grid, threshold);
 
-    const signatures = perDay.map(r => JSON.stringify(r));
-    const allSame = signatures.every(s => s === signatures[0]);
-    if (allSame) {
-        if (perDay[0].length === 0) return '';
-        return `~${formatRanges(perDay[0])} daily`;
-    }
-    const groups = [];
-    let groupStart = 0;
-    for (let d = 1; d <= 7; d++) {
-        if (d === 7 || signatures[d] !== signatures[groupStart]) {
-            if (perDay[groupStart].length > 0) {
-                const label = groupStart === d - 1
-                    ? DAY_NAMES[groupStart]
-                    : `${DAY_NAMES[groupStart]}–${DAY_NAMES[d - 1]}`;
-                groups.push(`${label} ${formatRanges(perDay[groupStart])}`);
+    const hourly = new Array(24).fill(0);
+    const counts = new Array(24).fill(0);
+    for (let d = 0; d < 7; d++) {
+        for (let h = 0; h < 24; h++) {
+            const v = grid[d][h];
+            if (v !== null && v !== undefined) {
+                hourly[h] += v;
+                counts[h] += 1;
             }
-            groupStart = d;
         }
     }
-    if (groups.length === 0) return '';
-    return `~${groups.join(' · ')}`;
+    for (let h = 0; h < 24; h++) hourly[h] = counts[h] > 0 ? hourly[h] / counts[h] : 0;
+
+    const ranges = [];
+    let start = null;
+    for (let h = 0; h < 24; h++) {
+        if (hourly[h] >= threshold && start === null) start = h;
+        else if (hourly[h] < threshold && start !== null) {
+            ranges.push([start, h - 1]);
+            start = null;
+        }
+    }
+    if (start !== null) ranges.push([start, 23]);
+
+    if (ranges.length === 0) return '';
+    return `~${formatRanges(ranges)} daily`;
 }
 
 /* True when the group's typical online rate at (dow, hour) is below the
