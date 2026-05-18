@@ -54,8 +54,18 @@ const BOT_STATUS_PATTERNS = [
     /\bwent (online|offline)\b/i,
     /\bcame (online|offline)\b/i,
     /\bis (online|offline) now\b/i,
+    /* Spanish companion-bot status + game-event announcements. Tight enough
+       that genuine player chat about helis/cargo is unlikely to match. */
     /\bestá afk\b/i,
     /\bya no está afk\b/i,
+    /\bestá muerto\b/i,
+    /\bahora está (desconectado|conectado|en|fuera|muerto|vivo|afk)\b/i,
+    /\bha abandonado el mapa\b/i,
+    /\bha atracado\b/i,
+    /\bdebería estar llegando\b/i,
+    /\bhelicóptero de patrulla (ha|debería|está)\b/i,
+    /\bbarco de carga (ha|está|debería)\b/i,
+    /\bvendedor ambulante (ha|está|debería)\b/i,
 ];
 
 /* Franc returns ISO-639-3; LibreTranslate expects ISO-639-1. Only the
