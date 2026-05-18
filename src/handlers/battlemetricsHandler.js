@@ -30,7 +30,13 @@ const STEAM_NAME_REFRESH_MS = 24 * 60 * 60 * 1000;
 const RAID_ALERT_RATIO = 0.6;
 const RAID_ALERT_OFF_HOUR_THRESHOLD = 20; /* percent — below this, the group hour counts as "off" */
 const RAID_ALERT_COOLDOWN_MS = 30 * 60 * 1000; /* don't refire within 30 min */
+/* Spread background Steam profile scrapes so Steam stops 429-ing us on the
+   startup burst (every player in every tracker would otherwise hit within
+   a few seconds). User-driven scrapes (modal add-player) are unaffected. */
+const STEAM_SCRAPE_DELAY_MS = 1500;
 let _lastActivityRecomputeAt = 0;
+
+function _sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 module.exports = {
     handler: async function (client, firstTime = false) {
@@ -119,6 +125,10 @@ module.exports = {
                             name = calledSteamProfiles[player.steamId];
                         }
                         else {
+                            /* Pace background scrapes — Steam 429s a tight burst. */
+                            if (Object.keys(calledSteamProfiles).length > 0) {
+                                await _sleep(STEAM_SCRAPE_DELAY_MS);
+                            }
                             name = await Scrape.scrapeSteamProfileName(client, player.steamId);
                             calledSteamProfiles[player.steamId] = name;
                         }

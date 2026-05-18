@@ -342,6 +342,11 @@ module.exports = async (client, interaction) => {
                 tracker.title = bmInstance.server_name;
             }
             else {
+                /* New Battlemetrics ID needs an HTTP setup() which routinely
+                   exceeds Discord's 3 s interaction window. Ack the modal
+                   first (fire-and-forget) so the deferred update at the end
+                   of the handler does not blow up with "Unknown interaction". */
+                try { await interaction.deferUpdate(); } catch (e) { /* already acked */ }
                 const bmInstance = new Battlemetrics(trackerBattlemetricsId);
                 await bmInstance.setup();
                 if (bmInstance.lastUpdateSuccessful) {
@@ -515,5 +520,7 @@ module.exports = async (client, interaction) => {
         id: `${verifyId}`
     }));
 
-    interaction.deferUpdate();
+    if (!interaction.replied && !interaction.deferred) {
+        interaction.deferUpdate().catch(() => { /* token may have expired */ });
+    }
 }

@@ -54,6 +54,8 @@ const BOT_STATUS_PATTERNS = [
     /\bwent (online|offline)\b/i,
     /\bcame (online|offline)\b/i,
     /\bis (online|offline) now\b/i,
+    /\bestá afk\b/i,
+    /\bya no está afk\b/i,
 ];
 
 /* Franc returns ISO-639-3; LibreTranslate expects ISO-639-1. Only the
