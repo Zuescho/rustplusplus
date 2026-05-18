@@ -260,6 +260,13 @@ module.exports = {
 
         const fields = [];
         for (let i = 0; i < (fieldIndex + 1); i++) {
+            /* Force a row break before every page after the first. Discord packs
+               inline fields in rows of up to 3, so without this the 2 inline
+               fields of page N+1 would attach to the right of page N (and
+               wrap awkwardly into 3+1 instead of stacked 2+2). */
+            if (i > 0) {
+                fields.push({ name: '\u200B', value: '\u200B', inline: false });
+            }
             fields.push({
                 name: i === 0 ? `__${Client.client.intlGet(guildId, 'name')}__\n\u200B` : '\u200B',
                 value: playerName[i] !== '' ? playerName[i] : Client.client.intlGet(guildId, 'empty'),
