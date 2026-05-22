@@ -6,7 +6,7 @@
     "scripts": {
         "start": "ts-node .",
         "preinstall": "npx npm-force-resolutions",
-        "test": "tsc --noEmit -p ."
+        "test": "jest"
     },
     "repository": {
         "type": "git",
@@ -44,6 +44,7 @@
         "protobufjs": "7.2.4"
     },
     "devDependencies": {
+        "jest": "^30.4.2",
         "typescript": "^5.9.3"
     }
 }
