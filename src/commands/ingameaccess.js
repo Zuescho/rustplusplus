@@ -147,3 +147,9 @@ function getListCount(instance, listType) {
 	if (!Array.isArray(instance[listType]['steamIds'])) return 0;
 	return instance[listType]['steamIds'].length;
 }
+
+
+// Export for testing
+module.exports.ensureGeneralSettings = ensureGeneralSettings;
+module.exports.normalizeAccessMode = normalizeAccessMode;
+module.exports.getListCount = getListCount;
