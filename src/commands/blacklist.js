@@ -212,21 +212,21 @@ module.exports = {
 			} break;
 
 			case 'show': {
-					const [discordResults, steamResults] = await Promise.all([
-						Promise.all(instance.blacklist['discordIds'].map(async (discordId) => {
-							const user = await DiscordTools.getUserById(guildId, discordId);
-							if (user) return `${user.user.username} (${user.id})`;
-							return `${discordId}`;
-						})),
-						Promise.all(instance.blacklist['steamIds'].map(async (steamId) => {
-							const steamName = await Scrape.scrapeSteamProfileName(client, steamId);
-							if (steamName) return `${steamName} (${steamId})`;
-							return `${steamId}`;
-						}))
-					]);
+				const [discordResults, steamResults] = await Promise.all([
+					Promise.all(instance.blacklist['discordIds'].map(async (discordId) => {
+						const user = await DiscordTools.getUserById(guildId, discordId);
+						if (user) return `${user.user.username} (${user.id})`;
+						return `${discordId}`;
+					})),
+					Promise.all(instance.blacklist['steamIds'].map(async (steamId) => {
+						const steamName = await Scrape.scrapeSteamProfileName(client, steamId);
+						if (steamName) return `${steamName} (${steamId})`;
+						return `${steamId}`;
+					}))
+				]);
 
-					const discordUsers = discordResults.map(name => `${name}\n`).join('');
-					const steamIds = steamResults.map(name => `${name}\n`).join('');
+				const discordUsers = discordResults.map(name => `${name}\n`).join('');
+				const steamIds = steamResults.map(name => `${name}\n`).join('');
 
 				await client.interactionEditReply(interaction, {
 					embeds: [DiscordEmbeds.getEmbed({
