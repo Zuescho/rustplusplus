@@ -48,11 +48,13 @@ module.exports = {
     },
 
     decodeHtml: function (str) {
+        if (!str) return str;
+
         const htmlReservedSymbols = JSON.parse(Fs.readFileSync(
             Path.join(__dirname, '..', 'staticFiles', 'htmlReservedSymbols.json'), 'utf8'));
 
         for (const [key, value] of Object.entries(htmlReservedSymbols)) {
-            str = str.replace(key, value);
+            str = str.replaceAll(key, value);
         }
 
         return str;
