@@ -25,7 +25,6 @@ const Translate = require('translate');
 
 const Client = require('../../index.ts');
 const Constants = require('../util/constants.js');
-const Decay = require('../util/decay.js');
 const DiscordEmbeds = require('../discordTools/discordEmbeds');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordTools = require('../discordTools/discordTools.js');
