@@ -44,6 +44,8 @@
         "protobufjs": "7.2.4"
     },
     "devDependencies": {
+        "@jest/globals": "^30.4.1",
+        "jest": "^30.4.2",
         "typescript": "^5.9.3"
     }
 }
