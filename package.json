@@ -41,7 +41,7 @@
     },
     "resolutions": {
         "jpeg-js": "0.4.4",
-        "protobufjs": "7.2.4"
+        "protobufjs": "7.5.9"
     },
     "devDependencies": {
         "jest": "^30.4.2",
