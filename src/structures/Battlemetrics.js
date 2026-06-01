@@ -439,7 +439,7 @@ class Battlemetrics {
      */
     async getServerIdFromName(name) {
         const originalName = name;
-        name = encodeURI(name).replace('\#', '\*');
+        name = encodeURIComponent(name);
         const search = this.SEARCH_SERVER_NAME_API_CALL(name);
         const response = await this.#request(search);
 
