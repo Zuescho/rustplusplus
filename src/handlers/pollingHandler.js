@@ -63,10 +63,12 @@ module.exports = {
         if (!rustplus.isFirstPoll) {
             const prevTime = rustplus.time.time;
             const newTime = time.time.time;
-            if (prevTime < 19.0 && newTime >= 19.0) {
+            const sunset = time.time.sunset;
+            const sunrise = time.time.sunrise;
+            if (prevTime < sunset && newTime >= sunset) {
                 rustplus.sendInGameMessage(client.intlGet(rustplus.guildId, 'gettingDark'));
             }
-            if (prevTime < 7.5 && newTime >= 7.5) {
+            if (prevTime < sunrise && newTime >= sunrise) {
                 rustplus.sendInGameMessage(client.intlGet(rustplus.guildId, 'gettingLight'));
             }
         }
