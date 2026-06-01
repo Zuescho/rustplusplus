@@ -45,6 +45,7 @@ module.exports = (client, guild) => {
                 switchGroups: null,
                 alarms: null,
                 storageMonitors: null,
+                customAlarm: null,
                 activity: null,
                 trackers: null
             },
