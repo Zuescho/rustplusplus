@@ -130,10 +130,12 @@ function recomputePatterns(days = 30) {
     const upsert = db.prepare(
         'INSERT OR REPLACE INTO activity_patterns (player_id, dow, hour, online_pct, sample_count) VALUES (?, ?, ?, ?, ?)'
     );
-    const clearOld = db.prepare('DELETE FROM activity_patterns WHERE player_id = ?');
+    const clearAll = db.prepare('DELETE FROM activity_patterns');
     const apply = db.transaction(() => {
+        /* Rebuild the whole table so players that aged out of the window
+           don't keep stale pattern rows forever. */
+        clearAll.run();
         for (const [playerId, weekGrid] of grid.entries()) {
-            clearOld.run(playerId);
             for (let dow = 0; dow < 7; dow++) {
                 for (let hour = 0; hour < 24; hour++) {
                     const cell = weekGrid[dow][hour];
