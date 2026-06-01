@@ -20,15 +20,16 @@
 
 module.exports = {
     general: {
-        pollingIntervalMs: process.env.RPP_POLLING_INTERVAL || 10000,
-        showCallStackError: process.env.RPP_LOG_CALL_STACK || false,
-        reconnectIntervalMs: process.env.RPP_RECONNECT_INTERVAL || 15000,
+        pollingIntervalMs: parseInt(process.env.RPP_POLLING_INTERVAL) || 10000,
+        showCallStackError: process.env.RPP_LOG_CALL_STACK === 'true',
+        reconnectIntervalMs: parseInt(process.env.RPP_RECONNECT_INTERVAL) || 15000,
     },
     discord: {
         username: process.env.RPP_DISCORD_USERNAME || 'rustplusplus',
         clientId: process.env.RPP_DISCORD_CLIENT_ID || '',
         token: process.env.RPP_DISCORD_TOKEN || '',
-        needAdminPrivileges: process.env.RPP_NEED_ADMIN_PRIVILEGES || true, /* If true, only admins can delete (server, switch..), manage credentials and reset a channel */
+        needAdminPrivileges: process.env.RPP_NEED_ADMIN_PRIVILEGES === undefined
+            ? true : process.env.RPP_NEED_ADMIN_PRIVILEGES === 'true', /* If true, only admins can delete (server, switch..), manage credentials and reset a channel */
     },
     translate: {
         /* If set, the team-chat translator routes through this LibreTranslate
