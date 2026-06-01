@@ -95,6 +95,90 @@ Existing `instances/*.json` files are migrated in place — paired alarms, switc
 
 ---
 
+## Configuration & custom settings
+
+The bot is configured in three places: **environment variables** (process-wide,
+set at deploy time), the **Discord `settings` channel** (per-guild toggles the
+bot renders as buttons/selects), and **per-device / per-tracker** controls
+exposed in each entity's embed. The settings below are the ones this fork adds
+or changes relative to [upstream](https://github.com/alexemanuelol/rustplusplus);
+everything upstream documents still applies.
+
+### Environment variables
+
+All variables are prefixed `RPP_`. Only the two Discord credentials are
+required; the rest have sensible defaults.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `RPP_DISCORD_TOKEN` | — | **Required.** Discord bot token. |
+| `RPP_DISCORD_CLIENT_ID` | — | **Required.** Discord application (client) ID. |
+| `RPP_DISCORD_USERNAME` | `rustplusplus` | Display name the bot registers under. |
+| `RPP_NEED_ADMIN_PRIVILEGES` | `true` | When `true`, only Discord admins can delete servers/switches, manage credentials and reset channels. Set to the string `false` to allow non-admins. |
+| `RPP_POLLING_INTERVAL` | `10000` | Rust+ poll interval in ms. Lower = faster reactions, more API traffic. |
+| `RPP_RECONNECT_INTERVAL` | `15000` | Delay in ms before reconnecting after a dropped Rust+ connection. |
+| `RPP_LOG_CALL_STACK` | `false` | Set to the string `true` to include call-stack traces in error logs. |
+| `RPP_LIBRETRANSLATE_URL` | _(bundled)_ | **Fork.** LibreTranslate base URL for the translated team-chat channel. The Docker image runs a bundled instance on `127.0.0.1:5000` by default. Point at an external instance to override; set to an empty string to disable the LibreTranslate path entirely (falls back to the rate-limited Google web endpoint). |
+| `RPP_LIBRETRANSLATE_API_KEY` | _(empty)_ | **Fork.** API key for the LibreTranslate instance above, if it requires one. |
+
+> Note: `RPP_NEED_ADMIN_PRIVILEGES` and `RPP_LOG_CALL_STACK` are parsed as
+> strict booleans — the bot compares the value to the literal string `true`/`false`,
+> so `RPP_NEED_ADMIN_PRIVILEGES=false` actually disables the check.
+
+### Discord `settings` channel — fork-added toggles
+
+These appear as buttons/selects in the guild's `settings` channel. New or
+changed in this fork:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **In-game command access mode** (`inGameCommandAccessMode`) | `blacklist` | Switch in-game command gating between `blacklist` and `whitelist` mode (see the `/blacklist` and `/whitelist` slash commands). |
+| **Smart Alarm bypass mute** (`smartAlarmBypassMute`) | `true` | Smart Alarm announcements are still sent to in-game team chat even while the bot is muted in-game. |
+| **Custom Alarm bypass mute** (`customAlarmBypassMute`) | `false` | Same bypass for the RF-event "custom alarm" announcements (see Smart Alarm RF event tagging). |
+| **Smart Switch bypass mute** (`smartSwitchBypassMute`) | `true` | Smart Switch on/off announcements bypass the in-game mute. |
+| **Battlemetrics upcoming wipes** (`displayInformationBattlemetricsUpcomingWipes`) | `false` | Show Battlemetrics-reported upcoming wipes in the server info embed. |
+| **Team-chat translation** (`teamChatTranslateEnabled`) | `false` | Enable the `teamchat-translated` channel that translates non-EN/DE player messages to English. |
+| **Mention user IDs** (`mentionUserIds`) | `[]` | Discord user IDs to `@`-mention on raid/alert events. |
+
+### Event notification toggles — fork-added
+
+Each event in the `settings` channel has an independent **Discord** and
+**in-game** toggle. The fork adds the full Cargo Ship lifecycle and the Deep
+Sea events:
+
+| Event setting | Notes |
+| --- | --- |
+| `cargoShipDockingAtHarborSetting` | Ship approaching a harbor. |
+| `cargoShipDockingSetting` / `cargoShipDockedSetting` | State-machine: docking → docked. |
+| `cargoShipUndockingSetting` | Ship undocking; pairs with the 70 s "undocking soon" warning. |
+| `cargoShipLeavingSetting` | Ship leaving the harbor / map. |
+| `cargoShipLockedCrateSpawnedSetting` | Each of the 3 expected locked-crate spawns on the ship. |
+| `deepSeaDetectedSetting` / `deepSeaLeftMapSetting` | Deep Sea monument appear/leave (ported from FaiThiX). |
+
+Related in-game commands: **`!cargo`** (rich per-ship summary) and
+**`!cargo timer`** (sorted list of pending timers).
+
+### Per-tracker setting — Off-hours RAID ALERT
+
+Each tracker embed has a **RAID ALERT** button (stored as `raidAlert` on the
+tracker, default off). When enabled and the tracker has ≥2 players, the bot
+fires an `@everyone` Discord alert plus a forced in-game team-chat message when
+**≥60 %** of the tracker is online during a statistically *quiet* hour for the
+group, with a **30-minute** cooldown. The "quiet hour" determination uses the
+local SQLite activity log (a group hour counts as off-peak below the **20 %**
+activity threshold). Thresholds are defined in
+`src/handlers/battlemetricsHandler.js`.
+
+### Per-Smart-Alarm setting — RF event tag
+
+In a Smart Alarm's **Edit** modal, the **event tag** field (`eventTag`) lets you
+name the in-game event the alarm's RF receiver is wired to (e.g. `Large Excavator`,
+`Cargo Ship`). When set, the bot announces **both the start and the stop** of
+that event in the activity channel and team chat — useful for powered events the
+Rust+ API doesn't expose directly.
+
+---
+
 ## Thanks
 
 - **[liamcottle](https://github.com/liamcottle)** — for the [rustplus.js](https://github.com/liamcottle/rustplus.js) library.
