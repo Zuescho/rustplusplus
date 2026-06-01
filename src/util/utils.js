@@ -21,6 +21,11 @@
 const Fs = require('fs');
 const Path = require('path');
 
+/* Static lookup table, loaded once at module load instead of on every
+   decodeHtml() call (which runs on a hot path during profile scraping). */
+const HTML_RESERVED_SYMBOLS = JSON.parse(Fs.readFileSync(
+    Path.join(__dirname, '..', 'staticFiles', 'htmlReservedSymbols.json'), 'utf8'));
+
 module.exports = {
     parseArgs: function (str) {
         return str.trim().split(/[ ]+/);
@@ -50,8 +55,7 @@ module.exports = {
     decodeHtml: function (str) {
         if (!str) return str;
 
-        const htmlReservedSymbols = JSON.parse(Fs.readFileSync(
-            Path.join(__dirname, '..', 'staticFiles', 'htmlReservedSymbols.json'), 'utf8'));
+        const htmlReservedSymbols = HTML_RESERVED_SYMBOLS;
 
         for (const [key, value] of Object.entries(htmlReservedSymbols)) {
             str = str.replaceAll(key, value);
