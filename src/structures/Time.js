@@ -130,7 +130,9 @@ class Time {
         }
 
         let time = this.time;
-        let closest = Object.keys(object).map(Number).reduce(function (a, b) {
+        const keys = Object.keys(object).map(Number);
+        if (keys.length === 0) return null;
+        let closest = keys.reduce(function (a, b) {
             return (Math.abs(b - time) < Math.abs(a - time) ? b : a);
         });
 

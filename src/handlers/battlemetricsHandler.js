@@ -399,7 +399,9 @@ module.exports = {
                 let playerCounter = 0;
                 for (const playerId of playerIds) {
                     playerCounter += 1;
-                    const name = bmInstance.players[playerId]['name'].replace('[', '(').replace(']', ')');
+                    const bmPlayer = bmInstance.players[playerId];
+                    if (!bmPlayer || !bmPlayer['name']) continue;
+                    const name = bmPlayer['name'].replace('[', '(').replace(']', ')');
                     const playerStr = `[${name}](${Constants.BATTLEMETRICS_PROFILE_URL + `${playerId}`})\n`;
 
                     if (totalCharacters + playerStr.length >= Constants.EMBED_MAX_TOTAL_CHARACTERS) {
@@ -453,7 +455,9 @@ module.exports = {
                 let playerCounter = 0;
                 for (const playerId of bmInstance.logoutPlayers) {
                     playerCounter += 1;
-                    const name = bmInstance.players[playerId]['name'].replace('[', '(').replace(']', ')');
+                    const bmPlayer = bmInstance.players[playerId];
+                    if (!bmPlayer || !bmPlayer['name']) continue;
+                    const name = bmPlayer['name'].replace('[', '(').replace(']', ')');
                     const playerStr = `[${name}](${Constants.BATTLEMETRICS_PROFILE_URL + `${playerId}`})\n`;
 
                     if (totalCharacters + playerStr.length >= Constants.EMBED_MAX_TOTAL_CHARACTERS) {

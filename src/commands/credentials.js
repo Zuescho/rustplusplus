@@ -133,7 +133,7 @@ async function addCredentials(client, interaction, verifyId) {
             }
             delete client.fcmListeners[guildId];
             credentials.hoster = null;
-        } else {
+        } else if (client.fcmListenersLite[guildId]) {
             if (client.fcmListenersLite[guildId][steamId]) {
                 client.fcmListenersLite[guildId][steamId].destroy();
             }
@@ -227,7 +227,7 @@ async function removeCredentials(client, interaction, verifyId) {
         delete client.fcmListeners[guildId];
         credentials.hoster = null;
     }
-    else {
+    else if (client.fcmListenersLite[guildId]) {
         if (client.fcmListenersLite[guildId][steamId]) {
             client.fcmListenersLite[guildId][steamId].destroy();
         }

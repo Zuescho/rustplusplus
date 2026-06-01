@@ -142,6 +142,7 @@ class Team {
     }
 
     getPlayerLongestAlive() {
+        if (this.players.length === 0) return null;
         return this.players.reduce(function (prev, current) {
             return (prev.getAliveSeconds() > current.getAliveSeconds()) ? prev : current;
         })

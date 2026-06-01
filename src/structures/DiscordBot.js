@@ -471,6 +471,8 @@ class DiscordBot extends Discord.Client {
 
         if (instance.blacklist['discordIds'].includes(interaction.user.id) &&
             !interaction.member.permissions.has(Discord.PermissionsBitField.Flags.Administrator)) {
+            const str = this.intlGet(interaction.guildId, 'missingPermission');
+            await this.interactionReply(interaction, DiscordEmbeds.getActionInfoEmbed(1, str));
             return false;
         }
 
@@ -480,7 +482,7 @@ class DiscordBot extends Discord.Client {
         if (!interaction.member.permissions.has(Discord.PermissionsBitField.Flags.Administrator) &&
             !interaction.member.roles.cache.has(instance.role)) {
             let role = DiscordTools.getRole(interaction.guildId, instance.role);
-            const str = this.intlGet(interaction.guildId, 'notPartOfRole', { role: role.name });
+            const str = this.intlGet(interaction.guildId, 'notPartOfRole', { role: role ? role.name : instance.role });
             await this.interactionReply(interaction, DiscordEmbeds.getActionInfoEmbed(1, str));
             this.log(this.intlGet(null, 'warningCap'), str);
             return false;

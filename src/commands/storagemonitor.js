@@ -66,7 +66,7 @@ module.exports = {
 				const image = interaction.options.getString('image');
 
 				const device = InstanceUtils.getSmartDevice(guildId, entityId);
-				if (device === null) {
+				if (device === null || device.type !== 'storageMonitor') {
 					const str = client.intlGet(guildId, 'invalidId', { id: entityId });
 					await client.interactionEditReply(interaction, DiscordEmbeds.getActionInfoEmbed(1, str));
 					client.log(client.intlGet(null, 'warningCap'), str);
