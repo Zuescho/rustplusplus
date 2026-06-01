@@ -137,7 +137,7 @@ module.exports = {
 						fields: [
 							{
 								name: 'SteamId',
-								value: steamIds === '' ? '\u200B' : steamIds,
+								value: steamIds === '' ? '\u200B' : steamIds.slice(0, 1024),
 								inline: true
 							}]
 					})],

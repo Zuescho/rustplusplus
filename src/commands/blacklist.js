@@ -235,12 +235,12 @@ module.exports = {
 						fields: [
 							{
 								name: client.intlGet(guildId, 'discordUsers'),
-								value: discordUsers === '' ? '\u200B' : discordUsers,
+								value: discordUsers === '' ? '\u200B' : discordUsers.slice(0, 1024),
 								inline: true
 							},
 							{
 								name: 'SteamId',
-								value: steamIds === '' ? '\u200B' : steamIds,
+								value: steamIds === '' ? '\u200B' : steamIds.slice(0, 1024),
 								inline: true
 							}]
 					})],
