@@ -6,3 +6,6 @@ maps
 logs
 temp
 coverage/
+
+# Claude Code session files
+.claude/

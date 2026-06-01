@@ -80,7 +80,14 @@ module.exports = {
                 const image = interaction.options.getString('image');
 
                 let device = InstanceUtils.getSmartDevice(guildId, entityId);
+                if (device !== null && device.type !== 'switch') device = null;
                 if (device === null) {
+                    if (!rustplus || !rustplus.isOperational) {
+                        const str = client.intlGet(guildId, 'invalidId', { id: entityId });
+                        await client.interactionEditReply(interaction, DiscordEmbeds.getActionInfoEmbed(1, str));
+                        client.log(client.intlGet(null, 'warningCap'), str);
+                        return;
+                    }
                     isSmartSwitchGroup = true;
                     for (const groupId in instance.serverList[rustplus.serverId].switchGroups) {
                         if (groupId === entityId) {
