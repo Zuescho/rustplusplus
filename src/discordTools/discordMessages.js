@@ -445,7 +445,7 @@ module.exports = {
         const message = await module.exports.sendMessage(rustplus.guildId, content,
             instance.informationMessageId.map, instance.channelId.information);
 
-        if (message.id !== instance.informationMessageId.map) {
+        if (message && message.id !== instance.informationMessageId.map) {
             instance.informationMessageId.map = message.id;
             Client.client.setInstance(rustplus.guildId, instance);
         }
@@ -464,7 +464,7 @@ module.exports = {
         const message = await module.exports.sendMessage(rustplus.guildId, content,
             instance.informationMessageId.server, instance.channelId.information);
 
-        if (message.id !== instance.informationMessageId.server) {
+        if (message && message.id !== instance.informationMessageId.server) {
             instance.informationMessageId.server = message.id;
             Client.client.setInstance(rustplus.guildId, instance);
         }
@@ -483,7 +483,7 @@ module.exports = {
         const message = await module.exports.sendMessage(rustplus.guildId, content,
             instance.informationMessageId.event, instance.channelId.information);
 
-        if (message.id !== instance.informationMessageId.event) {
+        if (message && message.id !== instance.informationMessageId.event) {
             instance.informationMessageId.event = message.id;
             Client.client.setInstance(rustplus.guildId, instance);
         }
@@ -502,7 +502,7 @@ module.exports = {
         const message = await module.exports.sendMessage(rustplus.guildId, content,
             instance.informationMessageId.team, instance.channelId.information);
 
-        if (message.id !== instance.informationMessageId.team) {
+        if (message && message.id !== instance.informationMessageId.team) {
             instance.informationMessageId.team = message.id;
             Client.client.setInstance(rustplus.guildId, instance);
         }

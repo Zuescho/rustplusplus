@@ -31,7 +31,10 @@ module.exports = {
         if (options.hasOwnProperty('placeholder')) selectMenu.setPlaceholder(options.placeholder);
         if (options.hasOwnProperty('options')) {
             for (const option of options.options) {
-                option.description = option.description.substring(0, Constants.SELECT_MENU_MAX_DESCRIPTION_CHARACTERS);
+                if (option.description) {
+                    option.description = option.description.substring(0,
+                        Constants.SELECT_MENU_MAX_DESCRIPTION_CHARACTERS);
+                }
             }
             selectMenu.setOptions(options.options);
         }

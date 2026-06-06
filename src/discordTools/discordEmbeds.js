@@ -76,8 +76,8 @@ module.exports = {
         const server = instance.serverList[serverId];
         let hoster = Client.client.intlGet(guildId, 'unknown');
         if (credentials.hasOwnProperty(server.steamId)) {
-            hoster = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
-            hoster = hoster.user.username;
+            const hosterUser = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+            if (hosterUser) hoster = hosterUser.user.username;
         }
 
         let description = '';
@@ -578,7 +578,7 @@ module.exports = {
         return module.exports.getEmbed({
             title: Client.client.intlGet(guildId, 'smartDeviceNotFound', {
                 device: `${entity.name}${grid}`,
-                user: user.user.username
+                user: user ? user.user.username : Client.client.intlGet(guildId, 'unknown')
             }),
             color: Constants.COLOR_INACTIVE,
             description: `**ID** \`${entityId}\``,
@@ -599,7 +599,7 @@ module.exports = {
         return module.exports.getEmbed({
             title: Client.client.intlGet(guildId, 'smartDeviceNotFound', {
                 device: `${entity.name}${grid}`,
-                user: user.user.username
+                user: user ? user.user.username : Client.client.intlGet(guildId, 'unknown')
             }),
             color: Constants.COLOR_INACTIVE,
             description: `**ID** \`${entityId}\``,
@@ -620,7 +620,7 @@ module.exports = {
         return module.exports.getEmbed({
             title: Client.client.intlGet(guildId, 'smartDeviceNotFound', {
                 device: `${entity.name}${grid}`,
-                user: user.user.username
+                user: user ? user.user.username : Client.client.intlGet(guildId, 'unknown')
             }),
             color: Constants.COLOR_INACTIVE,
             description: `**ID** \`${entityId}\``,
@@ -1032,7 +1032,7 @@ module.exports = {
             if (credential === 'hoster') continue;
 
             const user = await DiscordTools.getUserById(guildId, credentials[credential].discord_user_id);
-            names += `${user.user.username}\n`;
+            names += `${user ? user.user.username : Client.client.intlGet(guildId, 'unknown')}\n`;
             steamIds += `${credential}\n`;
             hoster += `${credential === credentials.hoster ? `${Constants.LEADER_EMOJI}\n` : '\u200B\n'}`;
         }

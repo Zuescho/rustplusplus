@@ -1253,22 +1253,6 @@ class MapMarkers {
         this.crateLargeOilRigLocation = null;
     }
 
-    /* Help functions */
-
-    getClosestMonument(x, y) {
-        let minDistance = 1000000;
-        let closestMonument = null;
-        for (let monument of this.rustplus.map.monuments) {
-            let distance = Map.getDistance(x, y, monument.x, monument.y);
-            if (distance < minDistance && this.validCrateMonuments.includes(monument.token)) {
-                minDistance = distance;
-                closestMonument = monument;
-            }
-        }
-
-        return closestMonument;
-    }
-
     reset() {
         this.players = [];
         this.vendingMachines = [];
@@ -1328,8 +1312,6 @@ class MapMarkers {
 
         this.knownVendingMachines = [];
         this.cargoShipMetaData = new Object();
-        this.subscribedItemsId = [];
-        this.foundItems = [];
 
         this.crateSmallOilRigLocation = null;
         this.crateLargeOilRigLocation = null;

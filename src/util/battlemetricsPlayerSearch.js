@@ -50,6 +50,7 @@ async function _apiSearch(serverId, query) {
     const url = `https://api.battlemetrics.com/players?filter[search]=${encodeURIComponent(query)}` +
         `&filter[servers]=${encodeURIComponent(serverId)}&page[size]=${MAX_RESULTS}`;
     let results = [];
+    let success = false;
     try {
         const response = await BmRateLimiter.scheduleGet(url, { timeout: 8000 });
         if (response && response.data && Array.isArray(response.data.data)) {
@@ -58,6 +59,7 @@ async function _apiSearch(serverId, query) {
                 name: p.attributes && p.attributes.name ? p.attributes.name : String(p.id),
                 isOnline: false,
             }));
+            success = true;
         }
     }
     catch (e) {
@@ -65,7 +67,10 @@ async function _apiSearch(serverId, query) {
            the autocomplete handler. */
         results = [];
     }
-    _cache.set(key, { at: _now(), results });
+    /* Only cache successful responses (including a genuine "no matches"). A
+       transient API error must not be cached, or it would suppress retries for
+       the whole TTL even after the API recovers. */
+    if (success) _cache.set(key, { at: _now(), results });
     return results;
 }
 

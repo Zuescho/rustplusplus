@@ -636,7 +636,8 @@ class Battlemetrics {
                 this.players[entity.id]['positiveMatch'] = entity.attributes.positiveMatch;
                 this.players[entity.id]['createdAt'] = entity.attributes.createdAt;
                 this.players[entity.id]['updatedAt'] = entity.attributes.updatedAt;
-                const firstTimeVar = entity.meta.metadata.find(e => e.key === 'firstTime');
+                const firstTimeVar = entity.meta && entity.meta.metadata ?
+                    entity.meta.metadata.find(e => e.key === 'firstTime') : null;
                 if (firstTimeVar) this.players[entity.id]['firstTime'] = firstTimeVar.value;
 
                 /* Other */
@@ -670,7 +671,8 @@ class Battlemetrics {
                 this.players[entity.id]['positiveMatch'] = entity.attributes.positiveMatch;
                 this.players[entity.id]['createdAt'] = entity.attributes.createdAt;
                 this.players[entity.id]['updatedAt'] = entity.attributes.updatedAt;
-                const firstTimeVar = entity.meta.metadata.find(e => e.key === 'firstTime');
+                const firstTimeVar = entity.meta && entity.meta.metadata ?
+                    entity.meta.metadata.find(e => e.key === 'firstTime') : null;
                 if (firstTimeVar) this.players[entity.id]['firstTime'] = firstTimeVar.value;
 
                 /* Other */

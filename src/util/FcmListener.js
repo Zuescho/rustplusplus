@@ -523,9 +523,12 @@ async function playerDeath(client, guild, title, message, body, discordUserId) {
 async function teamLogin(client, guild, title, message, body) {
     const instance = client.getInstance(guild.id);
 
+    /* Skip the picture scrape for an empty targetId (mirrors playerDeath) so we
+       don't fire a malformed Steam request that can only fail. */
+    const png = body.targetId !== '' ? await Scrape.scrapeSteamProfilePicture(client, body.targetId) : null;
+
     const content = {
-        embeds: [DiscordEmbeds.getTeamLoginEmbed(
-            guild.id, body, await Scrape.scrapeSteamProfilePicture(client, body.targetId))]
+        embeds: [DiscordEmbeds.getTeamLoginEmbed(guild.id, body, png)]
     }
 
     const rustplus = client.rustplusInstances[guild.id];

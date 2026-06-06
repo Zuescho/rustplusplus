@@ -50,11 +50,18 @@ async function addTextChannel(name, idName, client, guild, parent, permissionWri
     }
     if (channel === undefined) {
         channel = await DiscordTools.addTextChannel(guild.id, name);
+        /* addTextChannel returns undefined if creation failed (e.g. missing
+           permissions) — bail out rather than dereference channel.id below. */
+        if (channel === undefined) {
+            client.log(client.intlGet(null, 'errorCap'),
+                client.intlGet(null, 'couldNotCreateTextChannel', { name: name }), 'error');
+            return;
+        }
         instance.channelId[idName] = channel.id;
         client.setInstance(guild.id, instance);
 
         try {
-            channel.setParent(parent.id);
+            await channel.setParent(parent.id);
         }
         catch (e) {
             client.log(client.intlGet(null, 'errorCap'),
@@ -62,9 +69,9 @@ async function addTextChannel(name, idName, client, guild, parent, permissionWri
         }
     }
 
-    if (instance.firstTime) {
+    if (channel !== undefined && instance.firstTime) {
         try {
-            channel.setParent(parent.id);
+            await channel.setParent(parent.id);
         }
         catch (e) {
             client.log(client.intlGet(null, 'errorCap'),

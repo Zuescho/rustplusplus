@@ -153,21 +153,22 @@ module.exports = {
                         if (name === null) continue;
 
                         player.steamNameLastScrapedAt = nowMs;
+                        const rawName = name; /* scraped Steam name, no clanTag */
                         name = (content.clanTag !== '' ? `${content.clanTag} ` : '') + `${name}`;
 
                         if (player.name !== name) {
                             await module.exports.trackerNewNameDetected(client, guildId, trackerId, battlemetricsId,
                                 player.name, name);
 
-                            /* The BM player id is stable across Steam-name
-                               changes, so only adopt a newly-matched id — never
-                               null out an existing one. The stored `name` here
-                               carries the Discord-side clanTag, which BM names
-                               never do, so this find only succeeds for untagged
-                               trackers; nulling on a miss used to silently drop
-                               tagged players from all login/logout tracking. */
+                            /* Re-link against the raw scraped name: BM display
+                               names mirror the Steam persona and never carry the
+                               Discord-side clanTag, so matching the tagged name
+                               never succeeded. Only adopt a newly-matched id —
+                               never null an existing one, since the BM id is
+                               stable across Steam-name changes (nulling on a miss
+                               used to silently drop the player from tracking). */
                             const newPlayerId = Object.keys(bmInstance.players)
-                                .find(e => bmInstance.players[e]['name'] === name);
+                                .find(e => bmInstance.players[e]['name'] === rawName);
                             if (newPlayerId) player.playerId = newPlayerId;
                             player.name = name;
                         }
