@@ -144,7 +144,10 @@ async function playersNameHandler(client, interaction, battlemetricsId) {
 	let foundPlayers = [];
 	if (name !== null) {
 		for (const playerId of players) {
-			if (bmInstance.players[playerId]['name'].includes(name)) foundPlayers.push(playerId);
+			/* A roster id can momentarily lack a name during a BM evaluation
+			   race; guard so .includes can't throw and hang the deferred reply. */
+			const pName = bmInstance.players[playerId] && bmInstance.players[playerId]['name'];
+			if (pName && pName.includes(name)) foundPlayers.push(playerId);
 		}
 	}
 	else {

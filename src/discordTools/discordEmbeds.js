@@ -572,7 +572,8 @@ module.exports = {
         const server = instance.serverList[serverId];
         const entity = server.storageMonitors[entityId];
         const credentials = InstanceUtils.readCredentialsFile(guildId);
-        const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+        const user = credentials.hasOwnProperty(server.steamId) ?
+            await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id) : undefined;
         const grid = entity.location !== null ? ` (${entity.location})` : '';
 
         return module.exports.getEmbed({
@@ -593,7 +594,8 @@ module.exports = {
         const server = instance.serverList[serverId];
         const entity = instance.serverList[serverId].switches[entityId];
         const credentials = InstanceUtils.readCredentialsFile(guildId);
-        const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+        const user = credentials.hasOwnProperty(server.steamId) ?
+            await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id) : undefined;
         const grid = entity.location !== null ? ` (${entity.location})` : '';
 
         return module.exports.getEmbed({
@@ -614,7 +616,8 @@ module.exports = {
         const server = instance.serverList[serverId];
         const entity = server.alarms[entityId];
         const credentials = InstanceUtils.readCredentialsFile(guildId);
-        const user = await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id);
+        const user = credentials.hasOwnProperty(server.steamId) ?
+            await DiscordTools.getUserById(guildId, credentials[server.steamId].discord_user_id) : undefined;
         const grid = entity.location !== null ? ` (${entity.location})` : '';
 
         return module.exports.getEmbed({

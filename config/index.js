@@ -18,23 +18,32 @@
 
 */
 
+/* Parse an integer env var, falling back to `def` unless the value is a finite
+   integer >= min. Unlike `parseInt(...) || def`, this lets a deliberate `0`
+   through (when min is 0) and rejects negatives/NaN instead of passing them on. */
+function envInt(name, def, min = 0) {
+    const v = parseInt(process.env[name], 10);
+    return Number.isInteger(v) && v >= min ? v : def;
+}
+
 module.exports = {
     general: {
-        pollingIntervalMs: parseInt(process.env.RPP_POLLING_INTERVAL, 10) || 10000,
+        pollingIntervalMs: envInt('RPP_POLLING_INTERVAL', 10000, 1),
         showCallStackError: process.env.RPP_LOG_CALL_STACK === 'true',
-        reconnectIntervalMs: parseInt(process.env.RPP_RECONNECT_INTERVAL, 10) || 15000,
+        reconnectIntervalMs: envInt('RPP_RECONNECT_INTERVAL', 15000, 1),
     },
     battlemetrics: {
         /* Spacing/jitter for the global Battlemetrics request queue. Raising
            these spreads the per-cycle burst of server polls (one per tracked
            server) over a wider, more random window so big groups stop tripping
-           Battlemetrics' short-window rate limits. */
-        requestSpacingMs: parseInt(process.env.RPP_BM_REQUEST_SPACING_MS, 10) || 1500,
-        requestJitterMs: parseInt(process.env.RPP_BM_REQUEST_JITTER_MS, 10) || 1500,
+           Battlemetrics' short-window rate limits. A value of 0 is allowed
+           (disables that component of the pacing). */
+        requestSpacingMs: envInt('RPP_BM_REQUEST_SPACING_MS', 1500),
+        requestJitterMs: envInt('RPP_BM_REQUEST_JITTER_MS', 1500),
         /* Base delay between background Steam profile-name scrapes. The actual
            wait is randomised between this and 2x this value, so a tracker with
            many players doesn't fire a synchronised scrape burst at Steam. */
-        steamScrapeDelayMs: parseInt(process.env.RPP_STEAM_SCRAPE_DELAY_MS, 10) || 1500,
+        steamScrapeDelayMs: envInt('RPP_STEAM_SCRAPE_DELAY_MS', 1500),
     },
     discord: {
         username: process.env.RPP_DISCORD_USERNAME || 'rustplusplus',

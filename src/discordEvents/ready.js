@@ -75,12 +75,21 @@ module.exports = {
         await client.updateBattlemetricsInstances();
         /* The handler is async; setInterval ignores the returned promise, so a
            single unguarded throw would surface as an unhandled rejection every
-           cycle. Wrap it to log instead and keep the poll loop alive. */
+           cycle. Wrap it to log instead and keep the poll loop alive. The
+           `polling` flag prevents re-entrancy: with large rosters the startup
+           Steam-scrape burst can exceed the 60s interval, and overlapping runs
+           would mutate the same tracker objects concurrently. `.finally`
+           guarantees the flag resets even if the handler throws. */
+        let polling = false;
         const runBattlemetricsPoll = (firstTime) => {
-            Promise.resolve(BattlemetricsHandler.handler(client, firstTime)).catch(e => {
-                client.log(client.intlGet(null, 'errorCap'),
-                    `Battlemetrics poll failed: ${e.message}`, 'error');
-            });
+            if (polling) return;
+            polling = true;
+            Promise.resolve(BattlemetricsHandler.handler(client, firstTime))
+                .catch(e => {
+                    client.log(client.intlGet(null, 'errorCap'),
+                        `Battlemetrics poll failed: ${e.message}`, 'error');
+                })
+                .finally(() => { polling = false; });
         };
         runBattlemetricsPoll(true);
         /* Offset the recurring poll by a random fraction of the cycle so

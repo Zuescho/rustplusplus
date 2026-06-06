@@ -508,7 +508,7 @@ async function playerDeath(client, guild, title, message, body, discordUserId) {
     const user = await DiscordTools.getUserById(guild.id, discordUserId);
 
     let png = null;
-    if (body.targetId !== '') png = await Scrape.scrapeSteamProfilePicture(client, body.targetId);
+    if (body.targetId) png = await Scrape.scrapeSteamProfilePicture(client, body.targetId);
     if (png === null) png = isValidUrl(body.img) ? body.img : Constants.DEFAULT_SERVER_IMG;
 
     const content = {
@@ -523,9 +523,9 @@ async function playerDeath(client, guild, title, message, body, discordUserId) {
 async function teamLogin(client, guild, title, message, body) {
     const instance = client.getInstance(guild.id);
 
-    /* Skip the picture scrape for an empty targetId (mirrors playerDeath) so we
-       don't fire a malformed Steam request that can only fail. */
-    const png = body.targetId !== '' ? await Scrape.scrapeSteamProfilePicture(client, body.targetId) : null;
+    /* Skip the picture scrape unless we have a targetId (mirrors playerDeath) so
+       we don't fire a malformed Steam request that can only fail. */
+    const png = body.targetId ? await Scrape.scrapeSteamProfilePicture(client, body.targetId) : null;
 
     const content = {
         embeds: [DiscordEmbeds.getTeamLoginEmbed(guild.id, body, png)]

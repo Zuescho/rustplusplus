@@ -171,6 +171,16 @@ module.exports = {
         const playerKey = interaction.options.getString('player');
 
         if (sub === 'add') {
+            /* The player option uses autocomplete, but Discord still lets the
+               user submit arbitrary free text. BM player ids are numeric, so
+               reject anything else rather than insert a junk row that never
+               matches a real player (and pollutes the activity log). */
+            if (!/^\d+$/.test(playerKey || '')) {
+                await client.interactionEditReply(interaction, DiscordEmbeds.getActionInfoEmbed(1,
+                    client.intlGet(guildId, 'trackerPlayerInvalidId', { id: playerKey })));
+                return;
+            }
+
             const bmInstance = client.battlemetricsInstances[tracker.battlemetricsId];
             const bmPlayer = bmInstance ? bmInstance.players[playerKey] : null;
 

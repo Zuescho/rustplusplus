@@ -200,6 +200,7 @@
     "trackerPlayerNotOnTracker": "That player isn't on this tracker.",
     "trackerPlayerAdded": "Added {name} to {tracker}.",
     "trackerPlayerRemoved": "Removed player from {tracker}.",
+    "trackerPlayerInvalidId": "Invalid player id `{id}` — pick a player from the autocomplete suggestions.",
     "trackerPlayerInputLabel": "Steam/BM ID or profile URL",
     "trackerPlayerInputPlaceholder": "ID or full profile URL — Steam or Battlemetrics",
     "raidAlertCap": "RAID ALERT",

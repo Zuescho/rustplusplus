@@ -43,7 +43,10 @@ module.exports = {
             return null;
         }
 
-        let png = response.data.match(/<img src="(.*_full.jpg)(.*?(?="))/);
+        /* Non-greedy so we stop at the first `_full.jpg` (the avatar, which Steam
+           also emits early in og:image) instead of letting `.*` run to the last
+           one on the page and capture a corrupted span. */
+        let png = response.data.match(/<img src="(.*?_full.jpg)(.*?(?="))/);
         if (png) {
             return png[1];
         }
@@ -52,12 +55,15 @@ module.exports = {
     },
 
     scrapeSteamIdFromVanity: async function (client, vanity) {
+        /* Encode the vanity segment — it comes from user input (a typed handle
+           or a pasted profile URL) and could contain URL-significant chars. */
+        const safeVanity = encodeURIComponent(vanity);
         const response = await module.exports.scrape(
-            `https://steamcommunity.com/id/${vanity}?xml=1`);
+            `https://steamcommunity.com/id/${safeVanity}?xml=1`);
 
         if (response.status !== 200) {
             client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'failedToScrapeProfileName', {
-                link: `https://steamcommunity.com/id/${vanity}`
+                link: `https://steamcommunity.com/id/${safeVanity}`
             }), 'error');
             return null;
         }
