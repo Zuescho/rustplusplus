@@ -31,6 +31,11 @@ const STEAM_NAME_REFRESH_MS = 24 * 60 * 60 * 1000;
 const RAID_ALERT_RATIO = 0.6;
 const RAID_ALERT_OFF_HOUR_THRESHOLD = 20; /* percent — below this, the group hour counts as "off" */
 const RAID_ALERT_COOLDOWN_MS = 30 * 60 * 1000; /* don't refire within 30 min */
+/* Per-player history required to count toward the raid alarm. The "is this an
+   off hour?" verdict and the "is the group online now?" ratio are computed over
+   the SAME eligible set (players with at least this many samples) so a single
+   long-tracked player's pattern can't stand in for the whole group. */
+const RAID_ALERT_MIN_SAMPLES = 500;
 /* Spread background Steam profile scrapes so Steam stops 429-ing us on the
    startup burst (every player in every tracker would otherwise hit within
    a few seconds). User-driven scrapes (modal add-player) are unaffected.
@@ -97,29 +102,38 @@ module.exports = {
                    hint and the off-hours raid alarm. Cheap insert per player. */
                 const trackedIds = content.players.map(p => p.playerId).filter(Boolean);
                 let onlineNowCount = 0;
+                let onlineSet = null;
                 if (trackedIds.length > 0) {
-                    const onlineSet = new Set(bmInstance.onlinePlayers.map(String));
+                    onlineSet = new Set(bmInstance.onlinePlayers.map(String));
                     ActivityDb.logSnapshot(trackedIds, onlineSet, Math.floor(Date.now() / 1000));
                     onlineNowCount = trackedIds.filter(id => onlineSet.has(String(id))).length;
                 }
 
                 /* Off-hours raid alarm: if the group's typical online rate at
                    the current local hour is below the off-hours threshold AND
-                   at least 60% of the tracker is online right now, fire once
-                   (with a cooldown so we don't spam during a sustained event). */
-                if (content.raidAlert && trackedIds.length >= 2 && !firstTime) {
-                    const ratio = onlineNowCount / trackedIds.length;
-                    if (ratio >= RAID_ALERT_RATIO) {
-                        const now = new Date();
-                        const dow = now.getDay();
-                        const hour = now.getHours();
-                        if (ActivityDb.isOffHourForGroup(trackedIds, dow, hour, RAID_ALERT_OFF_HOUR_THRESHOLD)) {
-                            const nowSec = Math.floor(Date.now() / 1000);
-                            const last = ActivityDb.getLastAlertAt(`${guildId}:${trackerId}`);
-                            if ((nowSec - last) * 1000 >= RAID_ALERT_COOLDOWN_MS) {
-                                ActivityDb.setLastAlertAt(`${guildId}:${trackerId}`, nowSec);
-                                await module.exports.fireRaidAlert(client, guildId, trackerId,
-                                    content, onlineNowCount, trackedIds.length);
+                   at least 60% of the group is online right now, fire once
+                   (with a cooldown so we don't spam during a sustained event).
+                   Both checks use the eligible set (players with enough history)
+                   so the verdict and the ratio describe the same players. */
+                if (content.raidAlert && !firstTime && onlineSet) {
+                    const eligibleIds = trackedIds.filter(id =>
+                        ActivityDb.getSampleCount(id) >= RAID_ALERT_MIN_SAMPLES);
+                    if (eligibleIds.length >= 2) {
+                        const eligibleOnline = eligibleIds.filter(id => onlineSet.has(String(id))).length;
+                        const ratio = eligibleOnline / eligibleIds.length;
+                        if (ratio >= RAID_ALERT_RATIO) {
+                            const now = new Date();
+                            const dow = now.getDay();
+                            const hour = now.getHours();
+                            if (ActivityDb.isOffHourForGroup(eligibleIds, dow, hour,
+                                RAID_ALERT_OFF_HOUR_THRESHOLD, RAID_ALERT_MIN_SAMPLES)) {
+                                const nowSec = Math.floor(Date.now() / 1000);
+                                const last = ActivityDb.getLastAlertAt(`${guildId}:${trackerId}`);
+                                if ((nowSec - last) * 1000 >= RAID_ALERT_COOLDOWN_MS) {
+                                    ActivityDb.setLastAlertAt(`${guildId}:${trackerId}`, nowSec);
+                                    await module.exports.fireRaidAlert(client, guildId, trackerId,
+                                        content, eligibleOnline, eligibleIds.length);
+                                }
                             }
                         }
                     }
@@ -269,6 +283,19 @@ module.exports = {
             try {
                 ActivityDb.purgeOld(30);
                 ActivityDb.recomputePatterns(30);
+
+                /* Sweep raid-alarm cooldown rows for trackers that no longer
+                   exist (covers trackers removed while the bot was offline or
+                   by editing the instance file directly). */
+                const validAlertKeys = [];
+                for (const guildItem of client.guilds.cache) {
+                    const gId = guildItem[0];
+                    const inst = client.getInstance(gId);
+                    for (const tId of Object.keys(inst.trackers || {})) {
+                        validAlertKeys.push(`${gId}:${tId}`);
+                    }
+                }
+                ActivityDb.pruneAlertsExcept(validAlertKeys);
             }
             catch (e) {
                 client.log(client.intlGet(null, 'errorCap'),

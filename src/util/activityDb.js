@@ -24,6 +24,11 @@ let _initFailed = false;
 
 const DB_FILE = Path.join(__dirname, '..', '..', 'instances', 'activity.sqlite');
 
+/* Snapshots are taken ~every 60s. Two samples more than this far apart don't
+   represent an observed, adjacent state change (the tracker was paused or the
+   bot was down in between), so transitions across such a gap aren't trusted. */
+const MAX_TRANSITION_GAP_SEC = 5 * 60;
+
 function init() {
     if (db || _initFailed) return db;
     try {
@@ -344,6 +349,29 @@ function setLastAlertAt(trackerId, ts) {
     ).run(String(trackerId), ts);
 }
 
+/* Drop a single tracker's raid-alarm cooldown row (called when the tracker is
+   deleted) so the tracker_alerts table doesn't accumulate orphaned rows. */
+function deleteAlertState(trackerId) {
+    if (!isAvailable()) return;
+    db.prepare('DELETE FROM tracker_alerts WHERE tracker_id = ?').run(String(trackerId));
+}
+
+/* Sweep any tracker_alerts rows whose tracker no longer exists. `validKeys` is
+   the full set of current `${guildId}:${trackerId}` keys; an empty set clears
+   the table. Runs periodically to catch trackers deleted while the bot was
+   offline or removed by editing the instance file directly. */
+function pruneAlertsExcept(validKeys) {
+    if (!isAvailable()) return 0;
+    const keys = Array.from(new Set((validKeys || []).map(String)));
+    if (keys.length === 0) {
+        return db.prepare('DELETE FROM tracker_alerts').run().changes;
+    }
+    const placeholders = keys.map(() => '?').join(',');
+    return db.prepare(
+        `DELETE FROM tracker_alerts WHERE tracker_id NOT IN (${placeholders})`
+    ).run(...keys).changes;
+}
+
 /* Report builders.
 
    Driven entirely off the aggregated (player, dow, hour) pattern grid plus
@@ -374,6 +402,11 @@ function getLastTransitions(playerId) {
     for (let i = 0; i < rows.length - 1; i++) {
         const cur = rows[i].is_online ? 1 : 0;
         const older = rows[i + 1].is_online ? 1 : 0;
+        /* Skip pairs that straddle a long gap (tracker paused or bot down): the
+           state may have flipped during the unobserved window, so reporting
+           rows[i] as the transition instant would be a confidently-wrong
+           timestamp. Only trust transitions between adjacent-in-time samples. */
+        if ((rows[i].checked_at - rows[i + 1].checked_at) > MAX_TRANSITION_GAP_SEC) continue;
         if (lastConnectedAt === null && cur === 1 && older === 0) {
             lastConnectedAt = rows[i].checked_at;
         }
@@ -550,6 +583,8 @@ module.exports = {
     isOffHourForGroup,
     getLastAlertAt,
     setLastAlertAt,
+    deleteAlertState,
+    pruneAlertsExcept,
     /* Report builders */
     getLastTransitions,
     getPeakHours,

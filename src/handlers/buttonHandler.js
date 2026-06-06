@@ -28,6 +28,7 @@ const SmartSwitchGroupHandler = require('./smartSwitchGroupHandler.js');
 const DiscordButtons = require('../discordTools/discordButtons.js');
 const DiscordModals = require('../discordTools/discordModals.js');
 const BattlemetricsHandler = require('./battlemetricsHandler.js');
+const ActivityDb = require('../util/activityDb.js');
 
 module.exports = async (client, interaction) => {
     const instance = client.getInstance(interaction.guildId);
@@ -1185,6 +1186,9 @@ module.exports = async (client, interaction) => {
 
         delete instance.trackers[ids.trackerId];
         client.setInstance(guildId, instance);
+
+        /* Drop the tracker's raid-alarm cooldown row so it doesn't orphan. */
+        ActivityDb.deleteAlertState(`${guildId}:${ids.trackerId}`);
     }
     else if (interaction.customId.startsWith('TrackerAddPlayer')) {
         const ids = JSON.parse(interaction.customId.replace('TrackerAddPlayer', ''));
