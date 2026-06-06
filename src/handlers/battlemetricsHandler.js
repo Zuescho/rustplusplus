@@ -159,9 +159,16 @@ module.exports = {
                             await module.exports.trackerNewNameDetected(client, guildId, trackerId, battlemetricsId,
                                 player.name, name);
 
+                            /* The BM player id is stable across Steam-name
+                               changes, so only adopt a newly-matched id — never
+                               null out an existing one. The stored `name` here
+                               carries the Discord-side clanTag, which BM names
+                               never do, so this find only succeeds for untagged
+                               trackers; nulling on a miss used to silently drop
+                               tagged players from all login/logout tracking. */
                             const newPlayerId = Object.keys(bmInstance.players)
                                 .find(e => bmInstance.players[e]['name'] === name);
-                            player.playerId = newPlayerId ? newPlayerId : null;
+                            if (newPlayerId) player.playerId = newPlayerId;
                             player.name = name;
                         }
                     }

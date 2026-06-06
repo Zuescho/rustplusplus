@@ -376,6 +376,11 @@ class DiscordBot extends Discord.Client {
                    another active tracker still needs the same server id. */
                 if (content.active === false) continue;
 
+                /* A tracker with no resolved Battlemetrics id can't be polled —
+                   skip it so we don't spin up a junk instance keyed under null
+                   (which would log a setup error on every poll). */
+                if (content.battlemetricsId === null) continue;
+
                 if (!activeInstances.includes(content.battlemetricsId)) {
                     activeInstances.push(content.battlemetricsId);
                     if (this.battlemetricsInstances.hasOwnProperty(content.battlemetricsId)) {

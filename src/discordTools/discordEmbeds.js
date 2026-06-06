@@ -907,6 +907,11 @@ module.exports = {
         const locationFieldName = Client.client.intlGet(guildId, 'location');
         const footer = instance.serverList[rustplus.serverId].title;
 
+        /* Hoist the lite-server lookup out of the per-player loop — the paired
+           check below is just a key-existence test, so use hasOwnProperty
+           instead of rebuilding Object.keys() twice per player. */
+        const serverListLite = instance.serverListLite[rustplus.serverId];
+
         let totalCharacters = title.length + teamMemberFieldName.length + statusFieldName.length + locationFieldName.length + footer.length;
         let fieldIndex = 0;
         let teammateName = [''], teammateStatus = [''], teammateLocation = [''];
@@ -924,7 +929,7 @@ module.exports = {
                 status += (isAfk) ? Constants.AFK_EMOJI : Constants.ONLINE_EMOJI;
                 status += (player.isAlive) ? ((isAfk) ? Constants.SLEEPING_EMOJI : Constants.ALIVE_EMOJI) :
                     Constants.DEAD_EMOJI;
-                status += (Object.keys(instance.serverListLite[rustplus.serverId]).includes(player.steamId)) ?
+                status += (serverListLite.hasOwnProperty(player.steamId)) ?
                     Constants.PAIRED_EMOJI : '';
                 status += (isAfk) ? ` ${afkTime}\n` : '\n';
             }
@@ -932,7 +937,7 @@ module.exports = {
                 const offlineTime = player.getOfflineTime('s');
                 status += Constants.OFFLINE_EMOJI;
                 status += (player.isAlive) ? Constants.SLEEPING_EMOJI : Constants.DEAD_EMOJI;
-                status += (Object.keys(instance.serverListLite[rustplus.serverId]).includes(player.steamId)) ?
+                status += (serverListLite.hasOwnProperty(player.steamId)) ?
                     Constants.PAIRED_EMOJI : '';
                 status += (offlineTime !== null) ? offlineTime : '';
                 status += '\n';

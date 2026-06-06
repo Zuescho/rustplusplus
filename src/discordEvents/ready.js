@@ -73,13 +73,21 @@ module.exports = {
         }
 
         await client.updateBattlemetricsInstances();
-        BattlemetricsHandler.handler(client, true);
+        /* The handler is async; setInterval ignores the returned promise, so a
+           single unguarded throw would surface as an unhandled rejection every
+           cycle. Wrap it to log instead and keep the poll loop alive. */
+        const runBattlemetricsPoll = (firstTime) => {
+            Promise.resolve(BattlemetricsHandler.handler(client, firstTime)).catch(e => {
+                client.log(client.intlGet(null, 'errorCap'),
+                    `Battlemetrics poll failed: ${e.message}`, 'error');
+            });
+        };
+        runBattlemetricsPoll(true);
         /* Offset the recurring poll by a random fraction of the cycle so
            multiple bot instances don't synchronize their bursts. */
         const pollJitter = Math.floor(Math.random() * 30000);
         setTimeout(() => {
-            client.battlemetricsIntervalId = setInterval(
-                BattlemetricsHandler.handler, 60000, client, false);
+            client.battlemetricsIntervalId = setInterval(runBattlemetricsPoll, 60000, false);
         }, pollJitter);
 
         client.createRustplusInstancesFromConfig();
