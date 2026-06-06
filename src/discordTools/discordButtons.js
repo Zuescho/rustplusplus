@@ -476,6 +476,13 @@ module.exports = {
                     style: PRIMARY
                 }),
                 module.exports.getButton({
+                    customId: `TrackerActive${identifier}`,
+                    label: (tracker.active !== false) ?
+                        Client.client.intlGet(guildId, 'activeCap') :
+                        Client.client.intlGet(guildId, 'pausedCap'),
+                    style: (tracker.active !== false) ? SUCCESS : DANGER
+                }),
+                module.exports.getButton({
                     customId: `TrackerDelete${identifier}`,
                     style: SECONDARY,
                     emoji: '🗑️'

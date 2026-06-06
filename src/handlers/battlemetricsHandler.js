@@ -24,6 +24,7 @@ const DiscordTools = require('../discordTools/discordTools.js');
 const Scrape = require('../util/scrape.js');
 const ActivityDb = require('../util/activityDb.js');
 const PlayerSearch = require('../util/battlemetricsPlayerSearch.js');
+const Config = require('../../config');
 
 const ACTIVITY_RECOMPUTE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const STEAM_NAME_REFRESH_MS = 24 * 60 * 60 * 1000;
@@ -32,11 +33,22 @@ const RAID_ALERT_OFF_HOUR_THRESHOLD = 20; /* percent — below this, the group h
 const RAID_ALERT_COOLDOWN_MS = 30 * 60 * 1000; /* don't refire within 30 min */
 /* Spread background Steam profile scrapes so Steam stops 429-ing us on the
    startup burst (every player in every tracker would otherwise hit within
-   a few seconds). User-driven scrapes (modal add-player) are unaffected. */
-const STEAM_SCRAPE_DELAY_MS = 1500;
+   a few seconds). User-driven scrapes (modal add-player) are unaffected.
+   The wait is randomised between the base delay and 2x it so many players
+   don't end up perfectly evenly spaced (and thus still synchronised). */
+const STEAM_SCRAPE_DELAY_MS = Config.battlemetrics.steamScrapeDelayMs;
 let _lastActivityRecomputeAt = 0;
 
 function _sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function _steamScrapeWait() {
+    return STEAM_SCRAPE_DELAY_MS + Math.floor(Math.random() * STEAM_SCRAPE_DELAY_MS);
+}
+
+/* A tracker counts as active unless it's been explicitly paused. Older
+   instance files predate the field, so treat a missing flag as active. */
+function _isTrackerActive(tracker) {
+    return tracker.active !== false;
+}
 
 module.exports = {
     handler: async function (client, firstTime = false) {
@@ -62,6 +74,12 @@ module.exports = {
             }
 
             for (const [trackerId, content] of Object.entries(instance.trackers)) {
+                /* Paused tracker: do no API work at all — no server poll, no
+                   per-player Steam scrape, no activity snapshot. This is the
+                   lever for staying under Battlemetrics/Steam limits when too
+                   many players are being tracked. */
+                if (!_isTrackerActive(content)) continue;
+
                 const battlemetricsId = content.battlemetricsId;
                 const bmInstance = client.battlemetricsInstances[battlemetricsId];
 
@@ -127,7 +145,7 @@ module.exports = {
                         else {
                             /* Pace background scrapes — Steam 429s a tight burst. */
                             if (Object.keys(calledSteamProfiles).length > 0) {
-                                await _sleep(STEAM_SCRAPE_DELAY_MS);
+                                await _sleep(_steamScrapeWait());
                             }
                             name = await Scrape.scrapeSteamProfileName(client, player.steamId);
                             calledSteamProfiles[player.steamId] = name;
@@ -267,6 +285,8 @@ module.exports = {
         }
 
         for (const [trackerId, content] of Object.entries(instance.trackers)) {
+            if (!_isTrackerActive(content)) continue;
+
             const battlemetricsId = content.battlemetricsId;
             const bmInstance = client.battlemetricsInstances[battlemetricsId];
 

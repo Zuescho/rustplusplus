@@ -117,6 +117,9 @@ required; the rest have sensible defaults.
 | `RPP_NEED_ADMIN_PRIVILEGES` | `true` | When `true`, only Discord admins can delete servers/switches, manage credentials and reset channels. Set to the string `false` to allow non-admins. |
 | `RPP_POLLING_INTERVAL` | `10000` | Rust+ poll interval in ms. Lower = faster reactions, more API traffic. |
 | `RPP_RECONNECT_INTERVAL` | `15000` | Delay in ms before reconnecting after a dropped Rust+ connection. |
+| `RPP_BM_REQUEST_SPACING_MS` | `1500` | **Fork.** Minimum gap in ms between two Battlemetrics API requests in the global queue. Raise it to spread the per-cycle burst of server polls over a wider window when many trackers trip Battlemetrics rate limits. |
+| `RPP_BM_REQUEST_JITTER_MS` | `1500` | **Fork.** Extra random delay (0…this) added on top of the spacing for each Battlemetrics request, so calls don't fire on a fixed cadence. |
+| `RPP_STEAM_SCRAPE_DELAY_MS` | `1500` | **Fork.** Base delay in ms between background Steam profile-name scrapes. The actual wait is randomised between this and 2× this value, spreading the per-player scrape burst so Steam stops 429-ing large trackers. |
 | `RPP_LOG_CALL_STACK` | `false` | Set to the string `true` to include call-stack traces in error logs. |
 | `RPP_LIBRETRANSLATE_URL` | _(bundled)_ | **Fork.** LibreTranslate base URL for the translated team-chat channel. The Docker image runs a bundled instance on `127.0.0.1:5000` by default. Point at an external instance to override; set to an empty string to disable the LibreTranslate path entirely (falls back to the rate-limited Google web endpoint). |
 | `RPP_LIBRETRANSLATE_API_KEY` | _(empty)_ | **Fork.** API key for the LibreTranslate instance above, if it requires one. |
@@ -157,6 +160,19 @@ Sea events:
 
 Related in-game commands: **`!cargo`** (rich per-ship summary) and
 **`!cargo timer`** (sorted list of pending timers).
+
+### Per-tracker setting — Pause tracking (ACTIVE / PAUSED)
+
+Each tracker embed has an **ACTIVE / PAUSED** button (stored as `active` on the
+tracker, default on). Click it to **pause** a tracker: while paused the bot makes
+**no API calls** for it at all — no Battlemetrics server poll and no per-player
+Steam profile scrape — and its linked Battlemetrics instance is torn down on the
+next poll cycle (unless the active server or another *active* tracker still needs
+the same server). This is the lever for staying under Battlemetrics/Steam rate
+limits when you're tracking a lot of players: pause the trackers you don't need
+live right now and re-enable them on demand. The tracker embed shows a
+`Tracking: PAUSED ⏸️` line so paused trackers are obvious at a glance. Existing
+trackers from before this field default to active.
 
 ### Per-tracker setting — Off-hours RAID ALERT
 

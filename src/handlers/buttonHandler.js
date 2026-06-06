@@ -593,6 +593,7 @@ module.exports = async (client, interaction) => {
             everyone: false,
             inGame: true,
             raidAlert: false,
+            active: true,
             players: [],
             messageId: null
         }
@@ -1269,6 +1270,29 @@ module.exports = async (client, interaction) => {
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
             id: `${verifyId}`,
             value: `raidAlert=${tracker.raidAlert}`
+        }));
+
+        await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId, interaction);
+    }
+    else if (interaction.customId.startsWith('TrackerActive')) {
+        const ids = JSON.parse(interaction.customId.replace('TrackerActive', ''));
+        const tracker = instance.trackers[ids.trackerId];
+
+        if (!tracker) {
+            await interaction.message.delete();
+            return;
+        }
+
+        /* Toggle whether this tracker is polled. When paused it stops hitting
+           the Battlemetrics/Steam APIs entirely; the linked Battlemetrics
+           instance is torn down on the next poll cycle unless another active
+           tracker (or the active server) still needs it. */
+        tracker.active = (tracker.active === false);
+        client.setInstance(guildId, instance);
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `active=${tracker.active}`
         }));
 
         await DiscordMessages.sendTrackerMessage(guildId, ids.trackerId, interaction);

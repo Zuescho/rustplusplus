@@ -24,6 +24,18 @@ module.exports = {
         showCallStackError: process.env.RPP_LOG_CALL_STACK === 'true',
         reconnectIntervalMs: parseInt(process.env.RPP_RECONNECT_INTERVAL) || 15000,
     },
+    battlemetrics: {
+        /* Spacing/jitter for the global Battlemetrics request queue. Raising
+           these spreads the per-cycle burst of server polls (one per tracked
+           server) over a wider, more random window so big groups stop tripping
+           Battlemetrics' short-window rate limits. */
+        requestSpacingMs: parseInt(process.env.RPP_BM_REQUEST_SPACING_MS) || 1500,
+        requestJitterMs: parseInt(process.env.RPP_BM_REQUEST_JITTER_MS) || 1500,
+        /* Base delay between background Steam profile-name scrapes. The actual
+           wait is randomised between this and 2x this value, so a tracker with
+           many players doesn't fire a synchronised scrape burst at Steam. */
+        steamScrapeDelayMs: parseInt(process.env.RPP_STEAM_SCRAPE_DELAY_MS) || 1500,
+    },
     discord: {
         username: process.env.RPP_DISCORD_USERNAME || 'rustplusplus',
         clientId: process.env.RPP_DISCORD_CLIENT_ID || '',

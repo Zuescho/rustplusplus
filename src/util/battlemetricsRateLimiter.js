@@ -9,14 +9,17 @@
     the overall poll cycle meaningfully.
 
     Single global serial queue: each enqueued request waits MIN_SPACING_MS
-    after the previous one started. Jitter prevents two bot instances behind
-    the same NAT from synchronizing.
+    (plus 0..JITTER_MS of randomness) after the previous one started. Jitter
+    both desynchronises two bot instances behind the same NAT and spreads a
+    large burst of polls across a wider, less predictable window. Both values
+    are tunable via RPP_BM_REQUEST_SPACING_MS / RPP_BM_REQUEST_JITTER_MS.
 */
 
 const Axios = require('axios');
+const Config = require('../../config');
 
-const MIN_SPACING_MS = 1500;
-const JITTER_MS = 400;
+const MIN_SPACING_MS = Config.battlemetrics.requestSpacingMs;
+const JITTER_MS = Config.battlemetrics.requestJitterMs;
 
 let lastRequestAt = 0;
 let queueTail = Promise.resolve();

@@ -371,6 +371,11 @@ class DiscordBot extends Discord.Client {
             }
 
             for (const [trackerId, content] of Object.entries(instance.trackers)) {
+                /* A paused tracker must not keep its Battlemetrics instance
+                   alive (and thus polling) — unless the active server or
+                   another active tracker still needs the same server id. */
+                if (content.active === false) continue;
+
                 if (!activeInstances.includes(content.battlemetricsId)) {
                     activeInstances.push(content.battlemetricsId);
                     if (this.battlemetricsInstances.hasOwnProperty(content.battlemetricsId)) {

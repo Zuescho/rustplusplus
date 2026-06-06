@@ -157,6 +157,7 @@ module.exports = {
         const bmInstance = Client.client.battlemetricsInstances[battlemetricsId];
 
         const successful = bmInstance && bmInstance.lastUpdateSuccessful ? true : false;
+        const active = tracker.active !== false;
 
         const battlemetricsLink = `[${battlemetricsId}](${Constants.BATTLEMETRICS_SERVER_URL}${battlemetricsId})`;
 
@@ -178,6 +179,9 @@ module.exports = {
             (onlineCount > 0 ? Constants.ONLINE_EMOJI : Constants.OFFLINE_EMOJI);
 
         let description = `__**Battlemetrics ID:**__ ${battlemetricsLink}\n`;
+        description += `__**${Client.client.intlGet(guildId, 'tracking')}:**__ ` +
+            (active ? Client.client.intlGet(guildId, 'activeCap') :
+                `${Client.client.intlGet(guildId, 'pausedCap')} ⏸️`) + '\n';
         description += `__**${Client.client.intlGet(guildId, 'serverId')}:**__ ${tracker.serverId}\n`;
         description += `__**${Client.client.intlGet(guildId, 'serverStatus')}:**__ ${serverStatus}\n`;
         description += `__**${Client.client.intlGet(guildId, 'streamerMode')}:**__ `;
@@ -217,7 +221,7 @@ module.exports = {
                 : `${displayName}\n`;
 
             let status = '';
-            if (!bmInstance.players.hasOwnProperty(player.playerId) || !successful) {
+            if (!successful || !bmInstance.players.hasOwnProperty(player.playerId)) {
                 status += `${Constants.NOT_FOUND_EMOJI}\n`;
             }
             else {
