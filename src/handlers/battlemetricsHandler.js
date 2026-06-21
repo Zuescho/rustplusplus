@@ -60,6 +60,12 @@ module.exports = {
         const searchSteamProfiles = (client.battlemetricsIntervalCounter === 0) ? true : false;
         const calledSteamProfiles = new Object();
 
+        /* Dedupe activity-log snapshots within one poll cycle: a player tracked
+           on two active trackers (or across guilds) would otherwise insert two
+           rows with the same checked_at, inflating sample counts and risking
+           conflicting online states. Snapshot each BM player at most once. */
+        const snapshottedThisCycle = new Set();
+
         if (!firstTime) await client.updateBattlemetricsInstances();
 
         for (const guildItem of client.guilds.cache) {
@@ -105,7 +111,11 @@ module.exports = {
                 let onlineSet = null;
                 if (trackedIds.length > 0) {
                     onlineSet = new Set(bmInstance.onlinePlayers.map(String));
-                    ActivityDb.logSnapshot(trackedIds, onlineSet, Math.floor(Date.now() / 1000));
+                    const newIds = trackedIds.filter(id => !snapshottedThisCycle.has(id));
+                    if (newIds.length > 0) {
+                        ActivityDb.logSnapshot(newIds, onlineSet, Math.floor(Date.now() / 1000));
+                        for (const id of newIds) snapshottedThisCycle.add(id);
+                    }
                     onlineNowCount = trackedIds.filter(id => onlineSet.has(String(id))).length;
                 }
 

@@ -440,6 +440,15 @@ module.exports = async (client, interaction) => {
             }
         }
 
+        /* Mirror the slash-command/scraper convention: prefix the tracker's
+           clanTag onto real names so modal-added players match the rest of the
+           roster and don't trip a spurious name-change alert on the next Steam
+           re-scrape. Placeholders ('-'/null) stay untagged so the heal path can
+           resolve and tag them later. */
+        if (tracker.clanTag && name && name !== '-') {
+            name = `${tracker.clanTag} ${name}`;
+        }
+
         tracker.players.push({
             name: name,
             steamId: steamId,
