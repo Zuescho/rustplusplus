@@ -1175,10 +1175,12 @@ module.exports = {
                 block += '\n';
             }
 
-            /* Stop adding players once we're near Discord's 6000-char total
-               limit — the alternative (silently dropping fields) would be
-               worse for the reader than a clear cutoff. */
-            if (totalCharacters + block.length > Constants.EMBED_MAX_TOTAL_CHARACTERS - 200) break;
+            /* Stop adding players once the description nears Discord's 4096-char
+               per-description limit — every block is concatenated into a single
+               embed description, so the binding cap is the description limit, not
+               the 6000-char embed total. Silently dropping is worse than a clear
+               cutoff. */
+            if (totalCharacters + block.length > Constants.EMBED_MAX_DESCRIPTION_CHARACTERS - 200) break;
             totalCharacters += block.length;
             description += block;
         }

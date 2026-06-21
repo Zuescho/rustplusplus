@@ -1145,6 +1145,13 @@ class MapMarkers {
            fallback doesn't re-fire next poll. */
         if (!firstTimer) {
             const cargoShipMeta = this.cargoShipMetaData[id];
+            /* The direction-based fallback in updateCargoShips may already have
+               announced this ship leaving (isLeaving set). Don't emit a second
+               identical 'cargoShipLeaving' notification. */
+            if (cargoShipMeta && cargoShipMeta.isLeaving) {
+                cargoShip.onItsWayOut = true;
+                return;
+            }
             if (cargoShipMeta) cargoShipMeta.isLeaving = true;
             cargoShip.onItsWayOut = true;
         }
