@@ -25,8 +25,12 @@
 */
 
 const Axios = require('axios');
-const Franc = require('franc-min');
-const Translate = require('translate');
+/* franc-min v6 and translate v3 are ESM-only. Node >= 22.12 can require() an
+   ESM graph with no top-level await, which both of these are, so this stays a
+   plain synchronous require — but the shapes differ from the old CJS builds:
+   franc-min now exports named bindings, translate a default export. */
+const { franc: Franc } = require('franc-min');
+const Translate = require('translate').default;
 
 const Config = require('../../config');
 
@@ -170,6 +174,29 @@ async function _libreTranslate(text, detected) {
 }
 
 /**
+ *  Google fallback, used when no LibreTranslate instance is configured.
+ *
+ *  The `translate` package defaults its source language to English rather than
+ *  auto-detecting — so the obvious `Translate(text, 'en')` asks it to translate
+ *  English to English and hands the input straight back, which the caller then
+ *  discards as "unchanged". Franc has already told us the real source language,
+ *  so pass it explicitly. (This has been true since translate v1; it is not a
+ *  behaviour change introduced by the v3 upgrade.)
+ *
+ *  @param {string} text The raw team-chat message body.
+ *  @param {string} detected The ISO-639-3 code franc detected.
+ *  @returns {Promise<string|null>} The translated text.
+ */
+async function _googleTranslate(text, detected) {
+    const from = FRANC_TO_LT[detected];
+    /* Without a mapping we have no ISO-639-1 code to give it. Asking for the
+       default en -> en would be a guaranteed no-op, so skip the call. */
+    if (!from) return null;
+
+    return await Translate(text, { from, to: 'en' });
+}
+
+/**
  * @param {string} text The raw team-chat message body.
  * @returns {Promise<{shouldPost:boolean, translatedText?:string, detected?:string}>}
  */
@@ -214,7 +241,7 @@ async function detectAndTranslate(text) {
     try {
         translatedText = provider === 'libre'
             ? await _libreTranslate(text, detected)
-            : await Translate(text, 'en');
+            : await _googleTranslate(text, detected);
     }
     catch (e) {
         const result = { shouldPost: false, detected, error: e.message, provider };

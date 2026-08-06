@@ -89,7 +89,32 @@ lives in [`src/rustplus/`](src/rustplus) and is hardened for long-running use:
 - `sendRequestAsync` drops its callback on timeout, so lost responses no longer leak for the life of the connection;
 - `isConnected()` no longer throws when called before `connect()`.
 
-Dropping the git dependency also unpinned `protobufjs`, so every in-range dependency is now current.
+### (☞ﾟヮﾟ)☞ Dependencies brought up to date
+
+Dropping the git-pinned `rustplus.js` fork unblocked the rest of the tree. Every dependency is now on its latest
+major:
+
+| Package | From | To | Notes |
+| --- | --- | --- | --- |
+| `jimp` | 0.22 | 1.6 | Full API rewrite — `loadFont`/`rgbaToInt` moved to named exports, `resize`/`print` take option objects, `writeAsync`→`write`, `getBufferAsync`→`getBuffer`. |
+| `better-sqlite3` | 11 | 13 | Ships prebuilt binaries; no source build needed. |
+| `protobufjs` | 7 | 8 | int64 fields still decode to `Long`, so nothing downstream changed. |
+| `@formatjs/intl` | 2 | 4 | ESM-only. |
+| `franc-min` | 5 | 6 | ESM-only, now exports named `franc`. |
+| `translate` | 1 | 3 | ESM-only, default export. |
+
+The three ESM-only packages are loaded with a plain `require()` — Node 22.12+ can require an ESM graph that has no
+top-level await, which all three are. **This is why the minimum Node version is now 22.12** (`engines` was previously
+`>=22.0.0`, though the docs already asked for 22.12).
+
+The `jpeg-js` resolution and the `npm-force-resolutions` preinstall hook are gone: jimp 1.x already depends on the
+version that was being pinned, so the override forced exactly what npm installs anyway. Installs no longer shell out
+to `npx` before resolving.
+
+**Not upgraded: `typescript` (held at 5.9).** TypeScript 7 is the native port and does not expose the legacy compiler
+API that `ts-node` — how the bot actually starts — depends on; under TS 7 `ts-node` dies with
+`TypeError: Cannot read properties of undefined (reading 'fileExists')` before the bot loads. Moving off `ts-node`
+first (the entry point is a 68-line file that is already plain CommonJS) would unblock it.
 
 ### ⚠ Rust+ event map marker removal
 

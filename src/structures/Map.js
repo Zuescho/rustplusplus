@@ -20,7 +20,9 @@
 
 const Fs = require('fs');
 const Gm = require('gm');
-const Jimp = require('jimp');
+/* jimp v1 dropped the default export and moved helpers to named exports; the
+   image class itself is `Jimp`. */
+const { Jimp, loadFont: jimpLoadFont } = require('jimp');
 const Path = require('path');
 
 const Constants = require('../util/constants.js');
@@ -315,7 +317,7 @@ class Map {
 
     async setupFont() {
         {
-            this.font = await Jimp.loadFont(
+            this.font = await jimpLoadFont(
                 Path.join(__dirname, '..', 'resources/fonts/PermanentMarker.fnt'));
         }
     }
@@ -324,7 +326,7 @@ class Map {
         for (const [marker, content] of Object.entries(this.mapMarkerImageMeta)) {
             content.jimp = await Jimp.read(content.image);
             if (marker !== 'map') {
-                content.jimp.resize(content.size, content.size);
+                content.jimp.resize({ w: content.size, h: content.size });
             }
         }
     }
@@ -367,8 +369,9 @@ class Map {
                     let name = (this.monumentInfo.hasOwnProperty(monument.token)) ?
                         this.monumentInfo[monument.token].map : monument.token;
                     let comp = name.length * 5;
-                    this.mapMarkerImageMeta.map.jimp.print(
-                        this.font, x - comp, y - 10, name);
+                    this.mapMarkerImageMeta.map.jimp.print({
+                        font: this.font, x: x - comp, y: y - 10, text: name
+                    });
                 }
             }
             catch (e) {
@@ -425,7 +428,8 @@ class Map {
             await this.mapAppendMonuments();
         }
 
-        await this.mapMarkerImageMeta.map.jimp.writeAsync(
+        /* v1 merged writeAsync into an async write(). */
+        await this.mapMarkerImageMeta.map.jimp.write(
             this.mapMarkerImageMeta.map.image.replace('clean.png', 'full.png'));
 
         try {

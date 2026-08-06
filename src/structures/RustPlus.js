@@ -20,7 +20,8 @@
 
 const Fs = require('fs');
 const Path = require('path');
-const Translate = require('translate');
+/* translate v3 is ESM-only with a default export; see teamChatTranslate.js. */
+const Translate = require('translate').default;
 
 const RustPlusLib = require('../rustplus');
 

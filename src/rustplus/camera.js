@@ -6,7 +6,9 @@
 "use strict";
 
 const { EventEmitter } = require("events");
-const Jimp = require("jimp");
+/* jimp v1: no default export, and the pixel/mime helpers moved to named
+   exports. Adapted from upstream, which still targets jimp 0.22. */
+const { Jimp, rgbaToInt, JimpMime } = require("jimp");
 
 class Camera extends EventEmitter {
 
@@ -240,7 +242,7 @@ class Camera extends EventEmitter {
             [0.7, 0.7, 0.7], [0.8, 0.6, 0.4], [1, 0.4, 0.4], [1, 0.1, 0.1],
         ];
 
-        const image = new Jimp(width, height);
+        const image = new Jimp({ width, height });
 
         for (let i = 0; i < output.length; i++) {
             let ray = output[i];
@@ -263,11 +265,11 @@ class Camera extends EventEmitter {
 
             let x = i % width;
             let y = height - 1 - Math.floor(i / width);
-            image.setPixelColor(Jimp.rgbaToInt(target_colour[0], target_colour[1], target_colour[2], 255), x, y);
+            image.setPixelColor(rgbaToInt(target_colour[0], target_colour[1], target_colour[2], 255), x, y);
         }
 
         // return png buffer
-        return image.getBufferAsync(Jimp.MIME_PNG);
+        return image.getBuffer(JimpMime.png);
 
     }
 

@@ -4,7 +4,7 @@
 
 Program | Version | Download | Note
 ------- | ------- | -------- | ----
-`NodeJS` | >= 22.12.0 | [**here**](https://nodejs.org/en/download/) | Since discordjs v14 is used, the version needs to be at least 22.12.0.
+`NodeJS` | >= 22.12.0 | [**here**](https://nodejs.org/en/download/) | discord.js v14 needs Node 22, and several dependencies (`franc-min`, `translate`, `@formatjs/intl`) are ESM-only — loading them from this CommonJS codebase relies on `require(esm)`, which landed in Node 22.12.
 `Git` | Any | [**here**](https://git-scm.com/downloads) | &nbsp;
 
 ## Optional Software
