@@ -24,6 +24,7 @@ const Fs = require('fs');
 const Path = require('path');
 
 const Battlemetrics = require('../structures/Battlemetrics');
+const BmToken = require('../util/battlemetricsToken.js');
 const Config = require('../../config');
 const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const DiscordTools = require('../discordTools/discordTools');
@@ -321,6 +322,13 @@ class DiscordBot extends Discord.Client {
      *  Check if Battlemetrics instances are missing/not required/need update.
      */
     async updateBattlemetricsInstances() {
+        if (!BmToken.isEnabled()) {
+            /* No API token — drop whatever we had so nothing downstream reads
+               stale player data as if it were live. */
+            this.battlemetricsInstances = new Object();
+            return;
+        }
+
         const activeInstances = [];
 
         /* Check for instances that are missing or need update. */

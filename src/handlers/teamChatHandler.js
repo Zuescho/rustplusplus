@@ -21,7 +21,31 @@
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const TeamChatTranslate = require('../util/teamChatTranslate.js');
 
+/**
+ *  Whether a teammate's messages should be kept out of the Discord relay.
+ *  @param {object} client The Discord bot client.
+ *  @param {string} guildId The guild the rustplus instance belongs to.
+ *  @param {*} steamId The steam id from the team message (may be a BigInt/Long).
+ *  @return {boolean}
+ */
+function isTeammateMuted(client, guildId, steamId) {
+    if (steamId === undefined || steamId === null) return false;
+
+    const instance = client.getInstance(guildId);
+    const muted = instance ? instance.mutedTeammates : null;
+    if (!muted) return false;
+
+    return Object.prototype.hasOwnProperty.call(muted, steamId.toString());
+}
+
 module.exports = async function (rustplus, client, message) {
+    /* Muted teammates (typically another rustplusplus bot sitting in the same
+       team) never reach the Discord team-chat channels. This is the single
+       choke point for the relay — both the normal path and the
+       blacklist/whitelist path in rustplusEvents/message.js end up here — so
+       one check covers everything. In-game chat itself is untouched. */
+    if (isTeammateMuted(client, rustplus.guildId, message.steamId)) return;
+
     await DiscordMessages.sendTeamChatMessage(rustplus.guildId, message);
 
     /* Optional: if the message isn't English or German, post an English

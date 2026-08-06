@@ -22,6 +22,7 @@ const Discord = require('discord.js');
 const Path = require('path');
 
 const BattlemetricsHandler = require('../handlers/battlemetricsHandler.js');
+const BmToken = require('../util/battlemetricsToken.js');
 const Config = require('../../config');
 
 module.exports = {
@@ -70,6 +71,14 @@ module.exports = {
             }
             await client.syncCredentialsWithUsers(guild);
             await client.setupGuild(guild);
+        }
+
+        /* Battlemetrics requires an API token now. The poll loop below stays
+           armed either way — the handler no-ops while no token is configured,
+           so `/battlemetrics set` starts things up without a bot restart. */
+        if (!BmToken.isEnabled()) {
+            client.log(client.intlGet(null, 'warningCap'),
+                client.intlGet(null, 'battlemetricsDisabledNoToken'));
         }
 
         await client.updateBattlemetricsInstances();

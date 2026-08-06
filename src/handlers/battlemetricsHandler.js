@@ -24,6 +24,7 @@ const DiscordTools = require('../discordTools/discordTools.js');
 const Scrape = require('../util/scrape.js');
 const ActivityDb = require('../util/activityDb.js');
 const PlayerSearch = require('../util/battlemetricsPlayerSearch.js');
+const BmToken = require('../util/battlemetricsToken.js');
 const Config = require('../../config');
 
 const ACTIVITY_RECOMPUTE_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -57,6 +58,17 @@ function _isTrackerActive(tracker) {
 
 module.exports = {
     handler: async function (client, firstTime = false) {
+        /* Local housekeeping (activity DB maintenance, legacy message sweep)
+           makes no API calls, so it has to keep running even while the
+           Battlemetrics integration is switched off — otherwise clearing the
+           token would silently stop 30-day snapshot purging and raid-alarm row
+           pruning for as long as the bot stays up. */
+        await module.exports.runLocalHousekeeping(client);
+
+        /* Without an API token every call below would 401 — skip the rest of
+           the cycle rather than burning requests and log noise on it. */
+        if (!BmToken.isEnabled()) return;
+
         const searchSteamProfiles = (client.battlemetricsIntervalCounter === 0) ? true : false;
         const calledSteamProfiles = new Object();
 
@@ -74,15 +86,6 @@ module.exports = {
             const rustplus = client.rustplusInstances[guildId];
 
             if (!firstTime) await module.exports.handleBattlemetricsChanges(client, guildId);
-
-            /* If a previous version of the bot left a "BM all online players"
-               info-channel message around, sweep it once on next poll. */
-            if (instance.informationMessageId.battlemetricsPlayers) {
-                await DiscordTools.deleteMessageById(guildId, instance.channelId.information,
-                    instance.informationMessageId.battlemetricsPlayers);
-                instance.informationMessageId.battlemetricsPlayers = null;
-                client.setInstance(guildId, instance);
-            }
 
             for (const [trackerId, content] of Object.entries(instance.trackers)) {
                 /* Paused tracker: do no API work at all — no server poll, no
@@ -285,34 +288,57 @@ module.exports = {
         else {
             client.battlemetricsIntervalCounter += 1;
         }
+    },
+
+    /**
+     *  Maintenance that touches only local state (SQLite activity log, stale
+     *  Discord messages). Runs on every poll cycle regardless of whether the
+     *  Battlemetrics integration has a token.
+     */
+    runLocalHousekeeping: async function (client) {
+        for (const guildItem of client.guilds.cache) {
+            const guildId = guildItem[0];
+            const instance = client.getInstance(guildId);
+            if (!instance) continue;
+
+            /* If a previous version of the bot left a "BM all online players"
+               info-channel message around, sweep it once on next poll. */
+            if (instance.informationMessageId.battlemetricsPlayers) {
+                await DiscordTools.deleteMessageById(guildId, instance.channelId.information,
+                    instance.informationMessageId.battlemetricsPlayers);
+                instance.informationMessageId.battlemetricsPlayers = null;
+                client.setInstance(guildId, instance);
+            }
+        }
 
         /* Aggregate the last 30 days into the (player, dow, hour) pattern grid
            once per day, and purge anything older than 30 days. */
         const nowMs = Date.now();
-        if (nowMs - _lastActivityRecomputeAt >= ACTIVITY_RECOMPUTE_INTERVAL_MS) {
-            try {
-                ActivityDb.purgeOld(30);
-                ActivityDb.recomputePatterns(30);
+        if (nowMs - _lastActivityRecomputeAt < ACTIVITY_RECOMPUTE_INTERVAL_MS) return;
 
-                /* Sweep raid-alarm cooldown rows for trackers that no longer
-                   exist (covers trackers removed while the bot was offline or
-                   by editing the instance file directly). */
-                const validAlertKeys = [];
-                for (const guildItem of client.guilds.cache) {
-                    const gId = guildItem[0];
-                    const inst = client.getInstance(gId);
-                    for (const tId of Object.keys(inst.trackers || {})) {
-                        validAlertKeys.push(`${gId}:${tId}`);
-                    }
+        try {
+            ActivityDb.purgeOld(30);
+            ActivityDb.recomputePatterns(30);
+
+            /* Sweep raid-alarm cooldown rows for trackers that no longer
+               exist (covers trackers removed while the bot was offline or
+               by editing the instance file directly). */
+            const validAlertKeys = [];
+            for (const guildItem of client.guilds.cache) {
+                const gId = guildItem[0];
+                const inst = client.getInstance(gId);
+                if (!inst) continue;
+                for (const tId of Object.keys(inst.trackers || {})) {
+                    validAlertKeys.push(`${gId}:${tId}`);
                 }
-                ActivityDb.pruneAlertsExcept(validAlertKeys);
             }
-            catch (e) {
-                client.log(client.intlGet(null, 'errorCap'),
-                    `ActivityDb recompute failed: ${e.message}`, 'error');
-            }
-            _lastActivityRecomputeAt = nowMs;
+            ActivityDb.pruneAlertsExcept(validAlertKeys);
         }
+        catch (e) {
+            client.log(client.intlGet(null, 'errorCap'),
+                `ActivityDb recompute failed: ${e.message}`, 'error');
+        }
+        _lastActivityRecomputeAt = nowMs;
     },
 
     handleBattlemetricsChanges: async function (client, guildId) {

@@ -20,8 +20,9 @@
 
 const Fs = require('fs');
 const Path = require('path');
-const RustPlusLib = require('@liamcottle/rustplus.js');
 const Translate = require('translate');
+
+const RustPlusLib = require('../rustplus');
 
 const Client = require('../../index.ts');
 const Constants = require('../util/constants.js');
@@ -871,7 +872,25 @@ class RustPlus extends RustPlusLib {
         return this.getInGameCargoSummary();
     }
 
+    /**
+     *  Cargo ship, patrol helicopter, traveling vendor and deep sea are all
+     *  driven by map markers the Rust+ API is dropping. When the feed is gone
+     *  say so, instead of reporting "not currently on map" — which reads as
+     *  live information that just happens to be negative.
+     *  @param {bool} isInfoChannel True when the caller renders the info embed.
+     *  @return {string|null} The replacement response, or null to continue.
+     */
+    getEventMarkersUnavailableResponse(isInfoChannel) {
+        if (this.mapMarkers?.isEventMarkerFeedAvailable() !== false) return null;
+        return isInfoChannel ?
+            Client.client.intlGet(this.guildId, 'eventMarkersUnavailableShort') :
+            Client.client.intlGet(this.guildId, 'eventMarkersUnavailable');
+    }
+
     getCommandCargo(isInfoChannel = false) {
+        const unavailable = this.getEventMarkersUnavailableResponse(isInfoChannel);
+        if (unavailable !== null) return unavailable;
+
         const strings = [];
         const handled = new Set();
         /* Prefer the post-harbor timers (these fire when we know the ship has
@@ -1328,6 +1347,9 @@ class RustPlus extends RustPlusLib {
     }
 
     getCommandHeli(isInfoChannel = false) {
+        const unavailable = this.getEventMarkersUnavailableResponse(isInfoChannel);
+        if (unavailable !== null) return unavailable;
+
         const strings = [];
         for (const patrolHelicopter of this.mapMarkers.patrolHelicopters) {
             if (isInfoChannel) {
@@ -2339,6 +2361,9 @@ class RustPlus extends RustPlusLib {
     }
 
     getCommandTravelingVendor(isInfoChannel = false) {
+        const unavailable = this.getEventMarkersUnavailableResponse(isInfoChannel);
+        if (unavailable !== null) return unavailable;
+
         const strings = [];
         for (const travelingVendor of this.mapMarkers.travelingVendors) {
             if (isInfoChannel) {
@@ -2381,6 +2406,11 @@ class RustPlus extends RustPlusLib {
     }
 
     getCommandDeepSea(isInfoChannel = false) {
+        /* Deep sea is detected purely from vending machine markers placed
+           outside the grid system, so it goes away with the same API change. */
+        const unavailable = this.getEventMarkersUnavailableResponse(isInfoChannel);
+        if (unavailable !== null) return unavailable;
+
         const instance = Client.client.getInstance(this.guildId);
         const deepSeaSettings = instance.serverList[this.serverId];
         const deepSeaWipeCooldown = deepSeaSettings.deepSeaWipeCooldownMs;

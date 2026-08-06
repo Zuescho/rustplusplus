@@ -13,6 +13,7 @@
 | --- | --- |
 | [**/alarm**](#alarm) | Edit a Smart Alarm (name, message, command, image, **event tag**). |
 | [**/alias**](#alias) | Create custom aliases for commands. |
+| [**/battlemetrics**](#battlemetrics) | **Set, clear or inspect the Battlemetrics API token.** |
 | [**/blacklist**](#blacklist) | Block a user from using the bot. |
 | [**/credentials**](#credentials) | Add/remove FCM credentials for an account. |
 | [**/help**](#help) | Show help links. |
@@ -20,6 +21,7 @@
 | [**/item**](#item) | Look up an item by name or ID. |
 | [**/leader**](#leader) | Transfer team leadership. |
 | [**/map**](#map) | Show the server map image. |
+| [**/mute**](#mute) | **Mute a teammate so their in-game chat is not relayed to Discord.** |
 | [**/players**](#players) | Battlemetrics player lookup. |
 | [**/reset**](#reset) | Reset Discord channels managed by the bot. |
 | [**/role**](#role) | Set/clear the role required to use the bot. |
@@ -51,6 +53,21 @@ You can also click the **Edit** button on an alarm in the `alarms` channel to se
 | `show` | |
 
 ![/alias](images/slash_commands/alias.png)
+
+## /battlemetrics
+
+Manage the Battlemetrics API token the bot authenticates with. Battlemetrics requires an authenticated (paid) key for
+the server and player endpoints the bot uses. Administrators only; every reply is ephemeral and the token is never
+written to the bot log.
+
+| Subcommand | Description |
+| --- | --- |
+| `set <token>` | Store the token in `credentials/battlemetrics.json` and enable the integration on the next poll cycle. Overrides `RPP_BATTLEMETRICS_TOKEN`. |
+| `clear` | Forget the stored token. `RPP_BATTLEMETRICS_TOKEN` takes over again if it is set. |
+| `status` | Show whether the integration is enabled, where the active token comes from, a masked form of it, and how many servers are being polled. |
+
+With no token from either source the Battlemetrics integration is disabled — no requests are made and trackers show no
+data — while the rest of the bot keeps working normally.
 
 ## /blacklist
 
@@ -114,6 +131,20 @@ Give or take team leadership from a member.
 | `markers` | Markers only. |
 
 ![/map](images/slash_commands/map.png)
+
+## /mute
+
+Stop a teammate's in-game chat from being relayed to the Discord `teamchat` channels. The usual case is a second bot
+sharing the team, which echoes every notification into team chat and floods the Discord channel with duplicates.
+
+| Subcommand | Description |
+| --- | --- |
+| `add <teammate>` | Mute a teammate. Autocompletes over the live team roster; a raw SteamID64 is also accepted. |
+| `remove <teammate>` | Unmute. Autocompletes over the currently muted list (including players who have since left the team). |
+| `list` | Show all muted teammates. |
+
+Muting only affects the Discord relay — the player still counts for the team, still shows up in game, and their in-game
+commands still work.
 
 ## /players
 

@@ -25,5 +25,6 @@
     "battlemetricsGlobalLogin": false,
     "battlemetricsGlobalLogout": false,
     "teamChatTranslateEnabled": false,
+    "logChannelEnabled": true,
     "mentionUserIds": []
 }

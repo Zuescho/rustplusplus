@@ -47,7 +47,8 @@ module.exports = (client, guild) => {
                 storageMonitors: null,
                 customAlarm: null,
                 activity: null,
-                trackers: null
+                trackers: null,
+                logs: null
             },
             informationMessageId: {
                 map: null,
@@ -68,6 +69,9 @@ module.exports = (client, guild) => {
             whitelist: {
                 steamIds: []
             },
+            /* Teammates whose in-game chat is not relayed to Discord.
+               steamId -> { name, mutedAt }. */
+            mutedTeammates: {},
             aliases: []
         };
     }
@@ -131,7 +135,8 @@ module.exports = (client, guild) => {
                 customAlarm: null,
                 storageMonitors: null,
                 activity: null,
-                trackers: null
+                trackers: null,
+                logs: null
             }
         }
         else {
@@ -150,6 +155,7 @@ module.exports = (client, guild) => {
             if (!instance.channelId.hasOwnProperty('storageMonitors')) instance.channelId.storageMonitors = null;
             if (!instance.channelId.hasOwnProperty('activity')) instance.channelId.activity = null;
             if (!instance.channelId.hasOwnProperty('trackers')) instance.channelId.trackers = null;
+            if (!instance.channelId.hasOwnProperty('logs')) instance.channelId.logs = null;
         }
 
         if (!instance.hasOwnProperty('informationMessageId')) {
@@ -185,6 +191,10 @@ module.exports = (client, guild) => {
             steamIds: []
         }
         if (!instance.whitelist.hasOwnProperty('steamIds')) instance.whitelist['steamIds'] = [];
+        if (!instance.hasOwnProperty('mutedTeammates') || instance.mutedTeammates === null ||
+            typeof instance.mutedTeammates !== 'object' || Array.isArray(instance.mutedTeammates)) {
+            instance.mutedTeammates = {};
+        }
         if (!instance.hasOwnProperty('aliases')) instance.aliases = [];
 
         for (const serverId of Object.keys(instance.serverList)) {

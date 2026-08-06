@@ -17,6 +17,7 @@
 
 const Axios = require('axios');
 const Config = require('../../config');
+const BmToken = require('./battlemetricsToken.js');
 
 const MIN_SPACING_MS = Config.battlemetrics.requestSpacingMs;
 const JITTER_MS = Config.battlemetrics.requestJitterMs;
@@ -24,7 +25,22 @@ const JITTER_MS = Config.battlemetrics.requestJitterMs;
 let lastRequestAt = 0;
 let queueTail = Promise.resolve();
 
+/* Every Battlemetrics call in the bot goes through here, so this is also the
+   single place that attaches the API token — that way a new call site can't
+   accidentally ship unauthenticated (which the API now answers with 401). */
 async function scheduleGet(url, options = {}) {
+    if (!BmToken.isEnabled()) {
+        throw new Error('Battlemetrics API token is not configured');
+    }
+
+    const requestOptions = {
+        ...options,
+        headers: {
+            ...BmToken.getAuthHeaders(),
+            ...(options.headers ?? {})
+        }
+    };
+
     const myTurn = queueTail.then(async () => {
         const now = Date.now();
         const elapsed = now - lastRequestAt;
@@ -32,7 +48,7 @@ async function scheduleGet(url, options = {}) {
         const wait = Math.max(0, MIN_SPACING_MS - elapsed) + jitter;
         if (wait > 0) await new Promise(r => setTimeout(r, wait));
         lastRequestAt = Date.now();
-        return Axios.get(url, options);
+        return Axios.get(url, requestOptions);
     });
     queueTail = myTurn.catch(() => { /* keep the chain alive on error */ });
     return myTurn;

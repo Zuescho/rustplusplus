@@ -22,6 +22,7 @@ const Client = require('../../index.ts');
 const RandomUsernames = require('../staticFiles/RandomUsernames.json');
 const Utils = require('../util/utils.js');
 const BmRateLimiter = require('../util/battlemetricsRateLimiter.js');
+const BmToken = require('../util/battlemetricsToken.js');
 
 const SERVER_LOG_SIZE = 1000;
 const CONNECTION_LOG_SIZE = 1000;
@@ -215,15 +216,48 @@ class Battlemetrics {
     /**
      *  Request a get call from the Axios library.
      *  @param {string} api_call The request api call string.
-     *  @return {object} The response from Axios library.
+     *  @return {object|null} The response from Axios library, or null when the
+     *                        integration is disabled (no API token configured).
      */
     async #request(api_call) {
+        if (!BmToken.isEnabled()) return null;
+
         try {
+            /* The rate limiter attaches the Authorization header. */
             return await BmRateLimiter.scheduleGet(api_call);
         }
         catch (e) {
-            return {};
+            /* Keep the server's response when there is one — the status code
+               is what tells an expired/rejected key apart from a network
+               blip, and callers only look at `.status`. */
+            return e.response ?? {};
         }
+    }
+
+    /**
+     *  Log a Battlemetrics failure, calling out the cases an operator can
+     *  actually act on (bad/expired key, rate limit) instead of the generic
+     *  "request failed" line.
+     *  @param {object} response The (possibly empty) Axios response object.
+     *  @param {string} api_call The request api call string.
+     */
+    #logRequestFailure(response, api_call) {
+        const status = response ? response.status : undefined;
+
+        if (status === 401 || status === 403) {
+            Client.client.log(Client.client.intlGet(null, 'errorCap'),
+                Client.client.intlGet(null, 'battlemetricsApiUnauthorized'), 'error');
+            return;
+        }
+
+        if (status === 429) {
+            Client.client.log(Client.client.intlGet(null, 'warningCap'),
+                Client.client.intlGet(null, 'battlemetricsApiRateLimited'), 'error');
+            return;
+        }
+
+        Client.client.log(Client.client.intlGet(null, 'errorCap'),
+            Client.client.intlGet(null, 'battlemetricsApiRequestFailed', { api_call: api_call }), 'error');
     }
 
     /**
@@ -380,13 +414,13 @@ class Battlemetrics {
      *  @return {(object|null)} The response data.
      */
     async request(api_call) {
-        if (this.id === null) return null;
+        if (!BmToken.isEnabled() || this.id === null) return null;
 
         const response = await this.#request(api_call);
+        if (response === null) return null;
 
         if (response.status !== 200) {
-            Client.client.log(Client.client.intlGet(null, 'errorCap'),
-                Client.client.intlGet(null, 'battlemetricsApiRequestFailed', { api_call: api_call }), 'error');
+            this.#logRequestFailure(response, api_call);
             return null;
         }
 
@@ -399,6 +433,8 @@ class Battlemetrics {
      *  decide if the server is streamer mode or not.
      */
     async setup() {
+        if (!BmToken.isEnabled()) return;
+
         if (this.id === null && this.name === null) {
             Client.client.log(Client.client.intlGet(null, 'errorCap'),
                 Client.client.intlGet(null, 'battlemetricsIdAndNameMissing'), 'error');
@@ -438,14 +474,16 @@ class Battlemetrics {
      *  @return {number|null} The id of the server.
      */
     async getServerIdFromName(name) {
+        if (!BmToken.isEnabled()) return null;
+
         const originalName = name;
         name = encodeURIComponent(name);
         const search = this.SEARCH_SERVER_NAME_API_CALL(name);
         const response = await this.#request(search);
+        if (response === null) return null;
 
         if (response.status !== 200) {
-            Client.client.log(Client.client.intlGet(null, 'errorCap'),
-                Client.client.intlGet(null, 'battlemetricsApiRequestFailed', { api_call: search }), 'error');
+            this.#logRequestFailure(response, search);
             return null;
         }
 
@@ -499,7 +537,7 @@ class Battlemetrics {
      *  @return {bool|null} null if id is not set, false if something went wrong, true if successful.
      */
     async evaluation(data = null, firstTime = false) {
-        if (this.id === null) return null;
+        if (!BmToken.isEnabled() || this.id === null) return null;
 
         if (data === null) {
             data = await this.request(this.GET_SERVER_DATA_API_CALL(this.id));

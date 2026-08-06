@@ -22,6 +22,37 @@ const Constants = require('../util/constants.js');
 const Map = require('../util/map.js');
 const Timer = require('../util/timer');
 
+/* Facepunch is removing vending machine and event map markers (cargo ship,
+   patrol helicopter, traveling vendor) from the Rust+ API. CH47 and Crate
+   markers are NOT part of that change, so the small/large oil rig heavy
+   scientist and locked crate events keep working exactly as before.
+
+   Every consumer of these markers (in-game commands, the info channel embed,
+   the map image, the map tracers) already copes with an empty collection, so
+   losing the feed degrades to "no data" rather than breaking. The one thing
+   that does NOT degrade cleanly is the moment the change lands mid-session:
+   all tracked markers of those types disappear from one poll to the next,
+   which the normal diffing logic reads as "the cargo ship left the map, the
+   heli left the map, the vendor left the map, every vending machine was
+   destroyed" and fires a burst of bogus notifications.
+
+   Vending machines are the reliable canary for this: a live server always has
+   a good number of them on the map, and they are removed in the same change.
+   So when they vanish we treat the whole event marker feed as gone, purge the
+   tracked state silently (no notifications, no lingering timers) and report
+   the affected events as unavailable instead of as "not currently on map". */
+
+/* Consecutive polls with zero vending machine markers before we conclude the
+   feed is really gone. At the default 10s poll interval this is ~2 minutes.
+
+   A single empty poll is not enough evidence: a server saving or restarting
+   behind a still-open websocket can return a short marker list for a tick or
+   two. So the first empty poll only makes the feed *suspect* — event marker
+   diffing is paused (which is what prevents the bogus "everything left the
+   map" burst) but no state is thrown away. If markers come back before the
+   threshold, tracking resumes exactly where it left off. */
+const VENDING_MACHINE_ABSENT_POLL_THRESHOLD = 12;
+
 class MapMarkers {
     constructor(mapMarkers, rustplus, client) {
         this._markers = mapMarkers.markers;
@@ -87,6 +118,11 @@ class MapMarkers {
 
         /* DeepSea. */
         this.isDeepSeaActive = false;
+
+        /* Event marker feed availability (see the note at the top of the file). */
+        this.eventMarkerFeedAvailable = true;
+        this.vendingMachineEverSeen = false;
+        this.vendingMachineAbsentPolls = 0;
 
         this.updateMapMarkers(mapMarkers);
     }
@@ -370,16 +406,193 @@ class MapMarkers {
 
 
 
+    /* Event marker feed availability */
+
+    /**
+     *  Whether the Rust+ API is still delivering vending machine and event
+     *  map markers (cargo ship, patrol helicopter, traveling vendor).
+     *  @return {boolean}
+     */
+    isEventMarkerFeedAvailable() {
+        return this.eventMarkerFeedAvailable;
+    }
+
+    /**
+     *  Whether the event markers in this poll should be diffed at all. False
+     *  while the feed is gone, and also while it is merely suspect — diffing an
+     *  empty marker list is exactly what would emit the bogus "cargo ship left
+     *  the map / heli left the map / every vending machine destroyed" burst.
+     *  @return {boolean}
+     */
+    shouldProcessEventMarkers() {
+        return this.eventMarkerFeedAvailable && this.vendingMachineAbsentPolls === 0;
+    }
+
+    /**
+     *  Decide whether the event marker feed is still being delivered, using
+     *  vending machine markers as the canary. Must run before the per-type
+     *  update functions so the poll in which the markers disappear is handled
+     *  as a feed problem rather than as a burst of "left the map" events.
+     *  @param {Array} markers The markers from the current poll.
+     */
+    updateEventMarkerFeedAvailability(markers) {
+        const vendingMachineMarkers = this.getMarkersOfType(this.types.VendingMachine, markers);
+
+        if (vendingMachineMarkers.length > 0) {
+            const wasUnavailable = !this.eventMarkerFeedAvailable;
+            const wasSuspect = this.vendingMachineAbsentPolls > 0;
+
+            this.vendingMachineEverSeen = true;
+            this.vendingMachineAbsentPolls = 0;
+
+            if (wasUnavailable) {
+                /* The feed genuinely came back after we tore the state down.
+                   Re-baseline from this poll so the markers that are already on
+                   the map aren't announced as brand new (and, for cargo ships,
+                   don't get an egress timer counting from the wrong moment). */
+                this.eventMarkerFeedAvailable = true;
+                this.baselineEventMarkers(markers);
+                this.rustplus.log(this.client.intlGet(null, 'infoCap'),
+                    this.client.intlGet(null, 'eventMarkerFeedRestored'));
+            }
+            else if (wasSuspect) {
+                /* Only a blip — nothing was discarded, so normal diffing picks
+                   up from where it paused with no notifications lost or faked. */
+                this.rustplus.log(this.client.intlGet(null, 'infoCap'),
+                    this.client.intlGet(null, 'eventMarkerFeedResumed'));
+            }
+            return;
+        }
+
+        if (!this.eventMarkerFeedAvailable) return;
+
+        this.vendingMachineAbsentPolls += 1;
+        if (this.vendingMachineAbsentPolls < VENDING_MACHINE_ABSENT_POLL_THRESHOLD) return;
+
+        this.eventMarkerFeedAvailable = false;
+        this.discardEventMarkerState();
+
+        this.rustplus.log(this.client.intlGet(null, 'warningCap'),
+            this.client.intlGet(null, 'eventMarkerFeedUnavailable'));
+    }
+
+    /**
+     *  Adopt the markers in this poll as the current state without emitting any
+     *  notifications or arming any timers — the same "this is simply what is on
+     *  the map right now" treatment a fresh connection gets. Used when the feed
+     *  returns after having been torn down, where we have no idea how long the
+     *  markers have been there and so cannot honestly time anything from now.
+     *  @param {Array} markers The markers from the current poll.
+     */
+    baselineEventMarkers(markers) {
+        const mapSize = this.rustplus.info.correctedMapSize;
+        const withLocation = (marker) => {
+            marker.location = Map.getPos(marker.x, marker.y, mapSize, this.rustplus);
+            return marker;
+        };
+
+        this.vendingMachines = this.getMarkersOfType(this.types.VendingMachine, markers).map(withLocation);
+        this.knownVendingMachines = this.vendingMachines.map(e => ({ x: e.x, y: e.y }));
+
+        /* A vending machine outside the grid system is the deep sea merchant.
+           Record it silently so a later disappearance still reports correctly. */
+        this.deepSeas = this.vendingMachines.filter(e =>
+            Map.isOutsideGridSystem(e.x, e.y, mapSize, 4 * Map.gridDiameter));
+        this.isDeepSeaActive = this.deepSeas.length > 0;
+
+        this.cargoShips = this.getMarkersOfType(this.types.CargoShip, markers).map(marker => {
+            withLocation(marker);
+            marker.onItsWayOut = false;
+            this.cargoShipMetaData[marker.id] = {
+                lockedCrateSpawnCounter: 0,
+                harborsDocked: [],
+                dockingStatus: null,
+                isLeaving: false,
+                prevPoint: null,
+                isDepartureCertain: true
+            };
+            this.rustplus.cargoShipTracers[marker.id] = [{ x: marker.x, y: marker.y }];
+            return marker;
+        });
+
+        this.patrolHelicopters = this.getMarkersOfType(this.types.PatrolHelicopter, markers).map(marker => {
+            withLocation(marker);
+            this.rustplus.patrolHelicopterTracers[marker.id] = [{ x: marker.x, y: marker.y }];
+            return marker;
+        });
+
+        this.travelingVendors = this.getMarkersOfType(this.types.TravelingVendor, markers).map(marker => {
+            withLocation(marker);
+            marker.isHalted = false;
+            return marker;
+        });
+    }
+
+    /**
+     *  Drop all state derived from the markers the API no longer sends, without
+     *  emitting the "left the map" notifications the normal diffing would.
+     *  Oil rig state (CH47/Crate driven) is deliberately left alone.
+     */
+    discardEventMarkerState() {
+        for (const id of Object.keys(this.cargoShipEgressTimers)) {
+            this.stopCargoShipTimer(this.cargoShipEgressTimers, id);
+        }
+        for (const id of Object.keys(this.cargoShipEgressAfterHarbor1Timers)) {
+            this.stopCargoShipTimer(this.cargoShipEgressAfterHarbor1Timers, id);
+        }
+        for (const id of Object.keys(this.cargoShipEgressAfterHarbor2Timers)) {
+            this.stopCargoShipTimer(this.cargoShipEgressAfterHarbor2Timers, id);
+        }
+        for (const id of Object.keys(this.cargoShipLockedCrateSpawnIntervals)) {
+            this.clearCargoShipLockedCrateSpawnScheduler(id);
+        }
+        for (const id of Object.keys(this.cargoShipLockedCrateSpawnTimeouts)) {
+            this.clearCargoShipLockedCrateSpawnScheduler(id);
+        }
+        for (const [id, timeoutId] of Object.entries(this.cargoShipUndockingNotificationTimeouts)) {
+            clearTimeout(timeoutId);
+            delete this.cargoShipUndockingNotificationTimeouts[id];
+        }
+        this.cargoShipLockedCrateNextSpawnTimes = new Object();
+        this.cargoShipUndockingNotificationEndTimes = new Object();
+        this.cargoShipMetaData = new Object();
+
+        for (const id of Object.keys(this.rustplus.cargoShipTracers)) {
+            delete this.rustplus.cargoShipTracers[id];
+        }
+        for (const id of Object.keys(this.rustplus.patrolHelicopterTracers)) {
+            delete this.rustplus.patrolHelicopterTracers[id];
+        }
+
+        this.cargoShips = [];
+        this.patrolHelicopters = [];
+        this.travelingVendors = [];
+        this.vendingMachines = [];
+        this.deepSeas = [];
+        this.knownVendingMachines = [];
+        this.isDeepSeaActive = false;
+    }
+
     /* Update event map markers */
 
     updateMapMarkers(mapMarkers) {
+        this.updateEventMarkerFeedAvailability(mapMarkers.markers);
+
+        /* The gated calls below are driven by markers the Rust+ API may no
+           longer send. Skipped both when the feed is gone for good and while it
+           is only suspect — diffing against a marker list we don't trust is
+           what would produce phantom "left the map" events. CH47, Crate, Player
+           and GenericRadius markers are unaffected by the change and keep
+           running unconditionally. */
+        const feed = this.shouldProcessEventMarkers();
+
         this.updatePlayers(mapMarkers);
-        this.updateCargoShips(mapMarkers);
-        this.updatePatrolHelicopters(mapMarkers);
+        if (feed) this.updateCargoShips(mapMarkers);
+        if (feed) this.updatePatrolHelicopters(mapMarkers);
         this.updateCH47s(mapMarkers);
-        this.updateVendingMachines(mapMarkers);
+        if (feed) this.updateVendingMachines(mapMarkers);
         this.updateGenericRadiuses(mapMarkers);
-        this.updateTravelingVendors(mapMarkers);
+        if (feed) this.updateTravelingVendors(mapMarkers);
     }
 
     updatePlayers(mapMarkers) {
@@ -1324,6 +1537,12 @@ class MapMarkers {
         this.crateLargeOilRigLocation = null;
 
         this.isDeepSeaActive = false;
+
+        /* A reset follows a disconnect, so re-evaluate the feed from scratch
+           on the next connection instead of carrying an old verdict over. */
+        this.eventMarkerFeedAvailable = true;
+        this.vendingMachineEverSeen = false;
+        this.vendingMachineAbsentPolls = 0;
     }
 }
 

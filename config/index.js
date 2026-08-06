@@ -44,6 +44,13 @@ module.exports = {
            wait is randomised between this and 2x this value, so a tracker with
            many players doesn't fire a synchronised scrape burst at Steam. */
         steamScrapeDelayMs: envInt('RPP_STEAM_SCRAPE_DELAY_MS', 1500),
+        /* Battlemetrics API token. Their API now requires an authenticated
+           (paid) key for the server/player endpoints this bot uses. This env
+           var is only the fallback — the runtime source of truth is
+           src/util/battlemetricsToken.js, which also holds a token set with
+           the `/battlemetrics set` slash command. With no token from either
+           source the whole Battlemetrics integration stays switched off. */
+        token: process.env.RPP_BATTLEMETRICS_TOKEN || '',
     },
     discord: {
         username: process.env.RPP_DISCORD_USERNAME || 'rustplusplus',

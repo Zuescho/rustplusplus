@@ -315,6 +315,23 @@ module.exports = async (client, interaction) => {
                 instance.generalSettings.teamChatTranslateEnabled)]
         });
     }
+    else if (interaction.customId === 'LogChannelEnabled') {
+        instance.generalSettings.logChannelEnabled = instance.generalSettings.logChannelEnabled === false;
+        client.setInstance(guildId, instance);
+
+        if (rustplus) rustplus.generalSettings.logChannelEnabled = instance.generalSettings.logChannelEnabled;
+
+        client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'buttonValueChange', {
+            id: `${verifyId}`,
+            value: `${instance.generalSettings.logChannelEnabled}`
+        }));
+
+        await client.interactionUpdate(interaction, {
+            components: [DiscordButtons.getLogChannelEnabledButton(
+                guildId,
+                instance.generalSettings.logChannelEnabled)]
+        });
+    }
     else if (interaction.customId === 'LeaderCommandEnabled') {
         instance.generalSettings.leaderCommandEnabled = !instance.generalSettings.leaderCommandEnabled;
         client.setInstance(guildId, instance);

@@ -23,6 +23,7 @@ const Path = require('path');
 const PushReceiverClient = require('@liamcottle/push-receiver/src/client');
 
 const Battlemetrics = require('../structures/Battlemetrics');
+const BmToken = require('../util/battlemetricsToken.js');
 const Constants = require('../util/constants.js');
 const DiscordButtons = require('../discordTools/discordButtons.js');
 const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
@@ -224,13 +225,21 @@ async function pairingServer(client, guild, title, message, body) {
     let messageObj = undefined;
     if (server) messageObj = await DiscordTools.getMessageById(guild.id, instance.channelId.servers, server.messageId);
 
-    let battlemetricsId = null;
-    const bmInstance = new Battlemetrics(null, title);
-    await bmInstance.setup();
-    if (bmInstance.lastUpdateSuccessful) {
-        battlemetricsId = bmInstance.id;
-        if (!client.battlemetricsInstances.hasOwnProperty(bmInstance.id)) {
-            client.battlemetricsInstances[bmInstance.id] = bmInstance;
+    /* Re-pairing an already known server must not clear what we already have:
+       without an API token (or on a failed lookup) keep the stored id and
+       connect string instead of resetting them to null. */
+    let battlemetricsId = server ? (server.battlemetricsId ?? null) : null;
+    let connect = server ? (server.connect ?? null) : null;
+
+    if (BmToken.isEnabled()) {
+        const bmInstance = new Battlemetrics(null, title);
+        await bmInstance.setup();
+        if (bmInstance.lastUpdateSuccessful) {
+            battlemetricsId = bmInstance.id;
+            connect = `connect ${bmInstance.server_ip}:${bmInstance.server_port}`;
+            if (!client.battlemetricsInstances.hasOwnProperty(bmInstance.id)) {
+                client.battlemetricsInstances[bmInstance.id] = bmInstance;
+            }
         }
     }
 
@@ -251,8 +260,7 @@ async function pairingServer(client, guild, title, message, body) {
         switchGroups: server ? server.switchGroups : {},
         messageId: (messageObj !== undefined) ? messageObj.id : null,
         battlemetricsId: battlemetricsId,
-        connect: (!bmInstance.lastUpdateSuccessful) ? null :
-            `connect ${bmInstance.server_ip}:${bmInstance.server_port}`,
+        connect: connect,
         cargoShipEgressTimeMs: server ? server.cargoShipEgressTimeMs : Constants.DEFAULT_CARGO_SHIP_EGRESS_TIME_MS,
         oilRigLockedCrateUnlockTimeMs: server ? server.oilRigLockedCrateUnlockTimeMs :
             Constants.DEFAULT_OIL_RIG_LOCKED_CRATE_UNLOCK_TIME_MS,

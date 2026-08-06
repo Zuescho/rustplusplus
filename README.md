@@ -48,6 +48,69 @@ Detection is fully offline (`franc-min`). A **bundled LibreTranslate** with the 
 Docker image and handles all Spanish lines locally — no rate limits, no API key, no external container. Other detected
 languages fall back to the `translate` package's free Google web endpoint. Toggleable in settings, defaults to off.
 
+### (⌐■_■) Battlemetrics API token
+
+Battlemetrics now requires an authenticated (paid) API key for the server and player endpoints the bot uses. Set it with
+the **`/battlemetrics set`** slash command (administrators only; stored in `credentials/battlemetrics.json`) or with the
+`RPP_BATTLEMETRICS_TOKEN` environment variable — the slash command wins if both are present. **`/battlemetrics status`**
+shows whether the integration is live, where the token came from and how many servers are being polled;
+**`/battlemetrics clear`** forgets the stored token.
+
+With no token the entire Battlemetrics integration switches itself off — no requests, no 401 spam in the log — while the
+rest of the bot (Rust+ connection, switches, alarms, team chat, events) keeps working. Setting a token takes effect on
+the next poll cycle; no restart needed.
+
+### (¬_¬) Mute a teammate from the Discord relay
+
+**`/mute add|remove|list`** stops a teammate's in-game chat from being posted to the Discord `teamchat` channels. The
+usual case is a second bot sharing the team: it echoes every notification into team chat, which then duplicates
+everything the Discord side already posted. Muting affects the Discord relay only — the player still counts for the
+team and their in-game commands still work. Both `add` and `remove` autocomplete over the live team roster / muted list,
+and a raw SteamID64 is accepted too.
+
+### (っ˘ω˘ς) Discord log channel
+
+A `logs` channel that mirrors the bot's log output, so you can see what the bot is doing without shelling into the host
+and tailing `logs/*.log`. Lines are batched into one code-block message every two seconds, the buffer is bounded (with
+an explicit `… N lines dropped` marker rather than a silent gap), and a failing send can never feed itself back into
+the log. Toggleable in the `settings` channel, defaults to on. Bot-wide log lines are only mirrored when the bot serves
+a single Discord server — in a multi-guild deployment they would leak one guild's activity into another guild's private
+channel; they always remain in `logs/discordBot.log`.
+
+### (ﾉ◕ヮ◕)ﾉ Built-in Rust+ API client
+
+The bot no longer depends on a git-pinned fork of [rustplus.js](https://github.com/liamcottle/rustplus.js). The library
+lives in [`src/rustplus/`](src/rustplus) and is hardened for long-running use:
+
+- the `.proto` is compiled once per process instead of on every reconnect, and now carries the `TravelingVendor` marker type;
+- inbound frames are decoded once instead of twice;
+- a malformed frame or a throwing response callback surfaces as an `error` event rather than an uncaught exception inside the websocket handler (which used to be able to take the process down);
+- a failed protobuf load surfaces as an `error` event instead of an unhandled rejection;
+- `sendRequestAsync` drops its callback on timeout, so lost responses no longer leak for the life of the connection;
+- `isConnected()` no longer throws when called before `connect()`.
+
+Dropping the git dependency also unpinned `protobufjs`, so every in-range dependency is now current.
+
+### ⚠ Rust+ event map marker removal
+
+Facepunch is removing vending machine and event map markers (cargo ship, patrol helicopter, traveling vendor) from the
+Rust+ API. CH47/Crate markers are **not** affected, so small/large oil rig heavy-scientist and locked-crate events keep
+working unchanged.
+
+The bot detects the change and degrades cleanly instead of firing a burst of bogus "cargo ship left the map / heli left
+the map / every vending machine was destroyed" notifications at the moment the feed disappears. Vending machines are
+the canary (a live map always has plenty, and they go in the same change). The first poll without them pauses event
+marker diffing but keeps every bit of state — a server saving behind a still-open websocket costs at most ~2 minutes of
+frozen event tracking, with no phantom notifications and nothing lost. Only after ~2 minutes of consecutive empty polls
+is the feed declared gone: state and cargo timers are then dropped silently, a single warning is logged, and `!cargo`,
+`!heli`, `!vendor`, `!deepsea` and the info-channel embed report the events as *unavailable* rather than as "not
+currently on the map".
+
+If the markers ever come back, tracking resumes automatically — after a real teardown the markers on the map are
+adopted as a baseline rather than replayed as fresh arrivals, so nothing is re-announced and no cargo timer is armed
+from a spawn time the bot cannot know. Deep sea detection is driven entirely by vending machine markers, so it goes
+away with them.
+
 ### (•‿•) Other quality-of-life
 
 - Smart switch on/off announcements bypass the in-game mute (same fix as Smart Alarms in v1.25.5).
@@ -120,6 +183,7 @@ required; the rest have sensible defaults.
 | `RPP_BM_REQUEST_SPACING_MS` | `1500` | **Fork.** Minimum gap in ms between two Battlemetrics API requests in the global queue. Raise it to spread the per-cycle burst of server polls over a wider window when many trackers trip Battlemetrics rate limits. |
 | `RPP_BM_REQUEST_JITTER_MS` | `1500` | **Fork.** Extra random delay (0…this) added on top of the spacing for each Battlemetrics request, so calls don't fire on a fixed cadence. |
 | `RPP_STEAM_SCRAPE_DELAY_MS` | `1500` | **Fork.** Base delay in ms between background Steam profile-name scrapes. The actual wait is randomised between this and 2× this value, spreading the per-player scrape burst so Steam stops 429-ing large trackers. |
+| `RPP_BATTLEMETRICS_TOKEN` | _(empty)_ | **Fork.** Battlemetrics API token. Their API now requires an authenticated (paid) key for the server/player endpoints. Overridden by a token set with `/battlemetrics set`. With neither set, the Battlemetrics integration is disabled and the rest of the bot runs normally. |
 | `RPP_LOG_CALL_STACK` | `false` | Set to the string `true` to include call-stack traces in error logs. |
 | `RPP_LIBRETRANSLATE_URL` | _(bundled)_ | **Fork.** LibreTranslate base URL for the translated team-chat channel. The Docker image runs a bundled instance on `127.0.0.1:5000` by default. Point at an external instance to override; set to an empty string to disable the LibreTranslate path entirely (falls back to the rate-limited Google web endpoint). |
 | `RPP_LIBRETRANSLATE_API_KEY` | _(empty)_ | **Fork.** API key for the LibreTranslate instance above, if it requires one. |
@@ -141,6 +205,7 @@ changed in this fork:
 | **Smart Switch bypass mute** (`smartSwitchBypassMute`) | `true` | Smart Switch on/off announcements bypass the in-game mute. |
 | **Battlemetrics upcoming wipes** (`displayInformationBattlemetricsUpcomingWipes`) | `false` | Show Battlemetrics-reported upcoming wipes in the server info embed. |
 | **Team-chat translation** (`teamChatTranslateEnabled`) | `false` | Enable the `teamchat-translated` channel that translates non-EN/DE player messages to English. |
+| **Log channel** (`logChannelEnabled`) | `true` | Mirror the bot's log output into the `logs` channel. Bot-wide lines are only mirrored on single-guild deployments. |
 | **Mention user IDs** (`mentionUserIds`) | `[]` | Discord user IDs to `@`-mention on raid/alert events. |
 
 ### Event notification toggles — fork-added
@@ -197,7 +262,8 @@ Rust+ API doesn't expose directly.
 
 ## Thanks
 
-- **[liamcottle](https://github.com/liamcottle)** — for the [rustplus.js](https://github.com/liamcottle/rustplus.js) library.
+- **[liamcottle](https://github.com/liamcottle)** — for the [rustplus.js](https://github.com/liamcottle/rustplus.js) library, vendored (MIT) in `src/rustplus/`.
+- **[olijeffers0n](https://github.com/olijeffers0n)** — for [rustplus](https://github.com/olijeffers0n/rustplus), whose maintained client informed the hardening of the vendored library.
 - **[alexemanuelol](https://github.com/alexemanuelol)** — for the [main rustplusplus bot](https://github.com/alexemanuelol/rustplusplus).
 - **[FaiThiX](https://github.com/FaiThiX)** — for the Deep Sea features, cargo lifecycle work, and map fixes.
 - **.Vegas.#4844** on Discord — for the icons.

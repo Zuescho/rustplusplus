@@ -22,6 +22,7 @@ const Colors = require("colors");
 const Winston = require("winston");
 
 const Config = require('../../config');
+const DiscordLogSink = require('../util/discordLogSink.js');
 
 class Logger {
     constructor(logFilePath, type) {
@@ -72,6 +73,10 @@ class Logger {
                     ((level === 'error') ? Colors.red(text) : Colors.yellow(text))
                 );
 
+                /* No guild: only mirrored on single-guild deployments, see
+                   discordLogSink.js. */
+                DiscordLogSink.capture(null, `${time} | ${text}`);
+
                 if (level === 'error' && Config.general.showCallStackError) {
                     for (let line of (new Error().stack.split(/\r?\n/))) {
                         this.logger.log({ level: level, message: `${time} | ${line}` });
@@ -94,6 +99,8 @@ class Logger {
                     Colors.white(`${this.serverName} `) +
                     ((level === 'error') ? Colors.red(text) : Colors.yellow(text))
                 );
+
+                DiscordLogSink.capture(this.guildId, `${time} | ${this.serverName} | ${text}`);
 
                 if (level === 'error' && Config.general.showCallStackError) {
                     for (let line of (new Error().stack.split(/\r?\n/))) {

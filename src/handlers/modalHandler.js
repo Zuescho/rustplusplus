@@ -21,6 +21,7 @@
 const Discord = require('discord.js');
 
 const Battlemetrics = require('../structures/Battlemetrics');
+const BmToken = require('../util/battlemetricsToken.js');
 const Constants = require('../util/constants.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const Keywords = require('../util/keywords.js');
@@ -83,6 +84,11 @@ module.exports = async (client, interaction) => {
         if (battlemetricsId !== server.battlemetricsId) {
             if (battlemetricsId === '') {
                 server.battlemetricsId = null;
+            }
+            else if (!BmToken.isEnabled()) {
+                /* No API token: we can't verify the id, so leave the stored
+                   one untouched rather than overwriting it with something
+                   unvalidated (or silently dropping it). */
             }
             else if (client.battlemetricsInstances.hasOwnProperty(battlemetricsId)) {
                 const bmInstance = client.battlemetricsInstances[battlemetricsId];
@@ -333,7 +339,9 @@ module.exports = async (client, interaction) => {
             client.battlemetricsIntervalCounter = 0;
         }
 
-        if (trackerBattlemetricsId !== tracker.battlemetricsId) {
+        /* Same reasoning as the server modal above: with no API token there is
+           no way to resolve/validate the id, so keep the stored one. */
+        if (BmToken.isEnabled() && trackerBattlemetricsId !== tracker.battlemetricsId) {
             if (client.battlemetricsInstances.hasOwnProperty(trackerBattlemetricsId)) {
                 const bmInstance = client.battlemetricsInstances[trackerBattlemetricsId];
                 tracker.battlemetricsId = trackerBattlemetricsId;

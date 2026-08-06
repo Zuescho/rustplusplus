@@ -15,6 +15,7 @@
 * [**Storagemonitors**](discord_text_channels.md#storagemonitors-channel)
 * [**Activity**](discord_text_channels.md#activity-channel)
 * [**Trackers**](discord_text_channels.md#trackers-channel)
+* [**Logs**](discord_text_channels.md#logs-channel)
 
 
 ## Information Channel
@@ -151,3 +152,21 @@ The Tracker embed shows:
 
 ![CREATE TRACKER](images/channels/tracker_create.png)
 ![Discord Text Channel Trackers](images/channels/trackers_channel.png)
+
+## Logs Channel
+
+> The Logs Channel mirrors the bot's own log output, so you can see what the bot is doing — and what is going wrong —
+> without shelling into the host and tailing `logs/*.log`.
+
+Lines are batched into a single code-block message roughly every two seconds rather than posted one at a time, which
+keeps the channel readable and stays well clear of Discord's per-channel rate limits. The buffer is bounded: if Discord
+is slow or unreachable the oldest lines are dropped and replaced with an explicit `... N log lines dropped (buffer full)`
+marker, so a gap is always visible rather than silent.
+
+The channel is created automatically alongside the other bot channels and is read-only for everyone but the bot. It can
+be turned off with the **log channel** toggle in the `settings` channel (`logChannelEnabled`, default on).
+
+Bot-wide log lines — those not tied to a specific Rust+ connection, such as startup messages and slash-command
+interactions — are only mirrored when the bot serves a single Discord server. In a multi-guild deployment they would
+expose one guild's activity in another guild's private channel, so they are written only to `logs/discordBot.log`.
+Per-guild log lines always go to that guild's own channel.
