@@ -30,7 +30,17 @@ WORKDIR /app
 
 COPY package.json /app/package.json
 COPY package-lock.json /app/package-lock.json
-RUN npm install
+# node:22-slim carries no C toolchain. better-sqlite3 bundles prebuilt binaries
+# and its binding.gyp collapses to an empty target when one matches the host,
+# but npm still fires the implicit `node-gyp rebuild`, whose build phase shells
+# out to make even for that empty target. Install the toolchain, use it, and
+# purge it in the same layer so none of it lands in the image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && npm install \
+    && apt-get purge -y --auto-remove build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
 COPY . /app
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
