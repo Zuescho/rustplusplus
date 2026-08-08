@@ -26,7 +26,12 @@ const BmToken = require('../util/battlemetricsToken.js');
 const Config = require('../../config');
 
 module.exports = {
-    name: 'ready',
+    /* discord.js renamed this event to 'clientReady' to distinguish it from the
+       gateway READY event, and v15 will only emit it under the new name. The
+       enum resolves to whichever name the installed version uses, so this keeps
+       firing across the whole ^14.21.0 range and into v15 -- unlike a literal,
+       which would be wrong on one side of the rename or the other. */
+    name: Discord.Events.ClientReady,
     once: true,
     async execute(client) {
         for (const guild of client.guilds.cache) {
