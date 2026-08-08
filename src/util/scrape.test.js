@@ -163,5 +163,29 @@ test('the vanity lookup resolves a SteamID64 from the XML payload', async () => 
     await withScrape({ status: 200, data: `<steamID64>${VALID_ID}</steamID64>` }, async () => {
         const client = makeClient();
         assert.strictEqual(await Scrape.scrapeSteamIdFromVanity(client, 'somebody'), VALID_ID);
+        assert.strictEqual(client.logs.length, 0);
+    });
+});
+
+/* Steam answers an unknown vanity with 200 and an <error> body, so this case
+   never reaches the status check above -- it has to be caught after parsing or
+   it stays silent. */
+test('an unknown vanity is reported with Steam own wording, not silence', async () => {
+    const xml = '<response><error>The specified profile could not be found.</error></response>';
+    await withScrape({ status: 200, data: xml }, async () => {
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamIdFromVanity(client, 'nosuchhandle'), null);
+        assert.strictEqual(client.logs.length, 1);
+        assert.match(client.logs[0].text, /does not know that vanity handle/);
+        assert.match(client.logs[0].text, /could not be found/);
+        assert.match(client.logs[0].text, /\/id\/nosuchhandle/);
+    });
+});
+
+test('a vanity page that parses to nothing is reported as a markup change', async () => {
+    await withScrape({ status: 200, data: '<response></response>' }, async () => {
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamIdFromVanity(client, 'somebody'), null);
+        assert.match(client.logs[0].text, /found no SteamID64/);
     });
 });

@@ -139,7 +139,7 @@ module.exports = {
            markup change indistinguishable from a profile that genuinely has no
            avatar, so say so — this is the line that tells you the scraper, not
            the network, is what broke. */
-        client.log(client.intlGet(null, 'warningCap'), client.intlGet(null, 'scrapeProfilePictureNotFound', {
+        client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'scrapeProfilePictureNotFound', {
             link: link
         }), 'error');
         return null;
@@ -170,6 +170,22 @@ module.exports = {
             return match[1];
         }
 
+        /* Steam answers an unknown vanity with 200 and an <error> body rather
+           than a 404, so without this the single most common outcome -- a
+           typo'd handle -- was indistinguishable from Steam throttling us. Its
+           own wording is the reason worth reporting when it is there. */
+        const steamError = /<error>(.*?)<\/error>/.exec(response.data);
+        if (steamError) {
+            client.log(client.intlGet(null, 'warningCap'), client.intlGet(null, 'scrapeVanityNotFound', {
+                reason: Utils.decodeHtml(steamError[1]),
+                link: link
+            }));
+            return null;
+        }
+
+        client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'scrapeVanityNotResolved', {
+            link: link
+        }), 'error');
         return null;
     },
 
@@ -199,7 +215,7 @@ module.exports = {
             return Utils.decodeHtml(data[1]);
         }
 
-        client.log(client.intlGet(null, 'warningCap'), client.intlGet(null, 'scrapeProfileNameNotFound', {
+        client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'scrapeProfileNameNotFound', {
             link: link
         }), 'error');
         return null;

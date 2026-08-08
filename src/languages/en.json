@@ -648,6 +648,8 @@
     "scrapeInvalidSteamId": "Refusing to scrape a malformed SteamID64: {steamId}",
     "scrapeProfileNameNotFound": "Loaded the Steam profile but found no persona name, Steam may have changed its markup: {link}",
     "scrapeProfilePictureNotFound": "Loaded the Steam profile but found no avatar, Steam may have changed its markup: {link}",
+    "scrapeVanityNotFound": "Steam does not know that vanity handle ({reason}): {link}",
+    "scrapeVanityNotResolved": "Loaded the Steam vanity page but found no SteamID64, Steam may have changed its markup: {link}",
     "second": "{second} second",
     "secondCommandDelay": "{second} second command delay.",
     "seconds": "{seconds} seconds",
