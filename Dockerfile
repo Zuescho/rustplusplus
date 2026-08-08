@@ -32,11 +32,14 @@ COPY package.json /app/package.json
 COPY package-lock.json /app/package-lock.json
 # node:22-slim carries no C toolchain. better-sqlite3 bundles prebuilt binaries
 # and its binding.gyp collapses to an empty target when one matches the host,
-# but npm still fires the implicit `node-gyp rebuild`, whose build phase shells
-# out to make even for that empty target. Install the toolchain, use it, and
-# purge it in the same layer so none of it lands in the image.
+# but npm still fires the implicit `node-gyp rebuild` regardless: its configure
+# phase needs python3 and its build phase shells out to make, even for that
+# empty target. Both are named here rather than leaned on from the LibreTranslate
+# layer above, so this step keeps working if that layer ever moves or goes away.
+# build-essential is purged in the same layer so none of it lands in the image;
+# python3 survives the autoremove (it is a runtime dependency) and is wanted.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
+    && apt-get install -y --no-install-recommends build-essential python3 \
     && npm install \
     && apt-get purge -y --auto-remove build-essential \
     && apt-get clean \
