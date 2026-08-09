@@ -25,6 +25,11 @@ const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const PermissionHandler = require('../handlers/permissionHandler.js');
 const Scrape = require('../util/scrape.js');
+const Utils = require('../util/utils.js');
+
+const STEAM_NAME_LOOKUP_LIMIT = Constants.STEAM_NAME_LOOKUP_LIMIT;
+const STEAM_NAME_LOOKUP_CONCURRENCY = Constants.STEAM_NAME_LOOKUP_CONCURRENCY;
+const mapWithConcurrency = Utils.mapWithConcurrency;
 
 module.exports = {
 	name: 'blacklist',
@@ -212,18 +217,30 @@ module.exports = {
 			} break;
 
 			case 'show': {
-				const [discordResults, steamResults] = await Promise.all([
-					Promise.all(instance.blacklist['discordIds'].map(async (discordId) => {
+				const discordResults = await Promise.all(
+					instance.blacklist['discordIds'].map(async (discordId) => {
 						const user = await DiscordTools.getUserById(guildId, discordId);
 						if (user) return `${user.user.username} (${user.id})`;
 						return `${discordId}`;
-					})),
-					Promise.all(instance.blacklist['steamIds'].map(async (steamId) => {
-						const steamName = await Scrape.scrapeSteamProfileName(client, steamId);
-						if (steamName) return `${steamName} (${steamId})`;
-						return `${steamId}`;
-					}))
-				]);
+					}));
+
+				/* Paced and cached, not an N-wide parallel burst: firing one
+				   Steam request per blacklisted id every time somebody runs
+				   this command is exactly what gets the host 403'd, and that
+				   breaks the trackers. A handful at a time keeps the burst
+				   small without letting a hung Steam run the command past the
+				   interaction's expiry. The field truncates at 1024 characters
+				   anyway, so there is nothing to gain past the first 50. */
+				const steamResults = await mapWithConcurrency(
+					instance.blacklist['steamIds'].slice(0, STEAM_NAME_LOOKUP_LIMIT),
+					STEAM_NAME_LOOKUP_CONCURRENCY,
+					async (steamId) => {
+						const steamName = await Scrape.scrapeSteamProfileName(client, steamId, { cache: true });
+						return steamName ? `${steamName} (${steamId})` : `${steamId}`;
+					});
+				for (const steamId of instance.blacklist['steamIds'].slice(STEAM_NAME_LOOKUP_LIMIT)) {
+					steamResults.push(`${steamId}`);
+				}
 
 				const discordUsers = discordResults.map(name => `${name}\n`).join('');
 				const steamIds = steamResults.map(name => `${name}\n`).join('');

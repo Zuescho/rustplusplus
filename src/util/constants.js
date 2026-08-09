@@ -27,6 +27,16 @@ module.exports = {
     AFK_TIME_SECONDS: 5 * 60, /* 5 min */
     MAX_LENGTH_TEAM_MESSAGE: 128,
     STEAMID64_LENGTH: 17,
+
+    /* Well past what an embed field can display, so ids beyond this are listed
+       bare rather than looked up. */
+    STEAM_NAME_LOOKUP_LIMIT: 50,
+    /* Narrow enough not to be the burst that gets the host 403'd, wide enough
+       that the worst case stays far from the 15-minute deferred-interaction
+       expiry: the scraper's own timeout is 15 s, so a fully serial 50 would be
+       12.5 minutes against a blackholing Steam and the command would produce
+       nothing at all. */
+    STEAM_NAME_LOOKUP_CONCURRENCY: 5,
     STEAM_PROFILE_NAME_MAX_LENGTH: 32,
     BOT_MESSAGE_HISTORY_LIMIT: 16,
     BOT_LEAVE_VOICE_CHAT_TIMEOUT_MS: 10000,

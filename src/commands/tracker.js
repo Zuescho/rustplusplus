@@ -6,10 +6,10 @@
 
 const Builder = require('@discordjs/builders');
 
+const BattlemetricsHandler = require('../handlers/battlemetricsHandler.js');
 const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const PlayerSearch = require('../util/battlemetricsPlayerSearch.js');
-const Scrape = require('../util/scrape.js');
 
 const MAX_CHOICES = 25;
 
@@ -205,7 +205,7 @@ module.exports = {
             if (!name) name = playerKey;
             if (tracker.clanTag) name = `${tracker.clanTag} ${name}`;
 
-            tracker.players.push({ name, steamId, playerId });
+            tracker.players.push(BattlemetricsHandler.makeTrackerPlayer({ name, steamId, playerId }));
             client.setInstance(guildId, instance);
 
             client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'slashCommandValueChange', {
@@ -242,6 +242,3 @@ module.exports = {
         }
     },
 };
-
-// Silence unused-import lint in environments that flag it.
-void Scrape;

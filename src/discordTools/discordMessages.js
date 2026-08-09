@@ -21,6 +21,7 @@
 const Discord = require('discord.js');
 const Path = require('path');
 
+const Config = require('../../config');
 const Constants = require('../util/constants.js');
 const Client = require('../../index.ts');
 const DiscordButtons = require('./discordButtons.js');
@@ -48,8 +49,16 @@ module.exports = {
             return;
         }
 
-        let message = messageId !== null ?
-            await DiscordTools.getMessageById(guildId, channelId, messageId) : undefined;
+        let message = undefined;
+        if (messageId !== null) {
+            const fetched = await DiscordTools.fetchMessageById(guildId, channelId, messageId);
+            /* The card may well still be there — Discord just would not say so
+               right now. Posting a replacement would orphan it and repoint the
+               stored id, once per tracker per cycle for as long as the blip
+               lasts. Skipping this refresh costs one stale card for a minute. */
+            if (fetched.transient) return;
+            message = fetched.message;
+        }
 
         if (message !== undefined) {
             return await Client.client.messageEdit(message, content);
@@ -79,7 +88,9 @@ module.exports = {
         const message = await module.exports.sendMessage(guildId, content, server.messageId,
             instance.channelId.servers, interaction);
 
-        if (!interaction) {
+        /* sendMessage returns undefined when the channel is gone or the edit
+           failed; a TypeError here would abort whatever poll cycle called us. */
+        if (!interaction && message) {
             instance.serverList[serverId].messageId = message.id;
             Client.client.setInstance(guildId, instance);
         }
@@ -97,7 +108,10 @@ module.exports = {
         const message = await module.exports.sendMessage(guildId, content, tracker.messageId,
             instance.channelId.trackers, interaction);
 
-        if (!interaction) {
+        /* Trackers are edited once per tracker per poll cycle, so one failed
+           edit returning undefined used to throw straight out of the cycle and
+           take every remaining tracker down with it. */
+        if (!interaction && message) {
             instance.trackers[trackerId].messageId = message.id;
             Client.client.setInstance(guildId, instance);
         }
@@ -123,7 +137,8 @@ module.exports = {
         const message = await module.exports.sendMessage(guildId, content, entity.messageId,
             instance.channelId.switches, interaction);
 
-        if (!interaction) {
+        /* sendMessage returns undefined when the switches channel is gone, don't crash the caller over it. */
+        if (!interaction && message) {
             instance.serverList[serverId].switches[entityId].messageId = message.id;
             Client.client.setInstance(guildId, instance);
         }
@@ -145,7 +160,7 @@ module.exports = {
         const message = await module.exports.sendMessage(guildId, content, entity.messageId,
             instance.channelId.alarms, interaction);
 
-        if (!interaction) {
+        if (!interaction && message) {
             instance.serverList[serverId].alarms[entityId].messageId = message.id;
             Client.client.setInstance(guildId, instance);
         }
@@ -172,7 +187,7 @@ module.exports = {
         const message = await module.exports.sendMessage(guildId, content, entity.messageId,
             instance.channelId.storageMonitors, interaction);
 
-        if (!interaction) {
+        if (!interaction && message) {
             instance.serverList[serverId].storageMonitors[entityId].messageId = message.id;
             Client.client.setInstance(guildId, instance);
         }
@@ -192,7 +207,7 @@ module.exports = {
         const message = await module.exports.sendMessage(guildId, content, group.messageId,
             instance.channelId.switchGroups, interaction);
 
-        if (!interaction) {
+        if (!interaction && message) {
             instance.serverList[serverId].switchGroups[groupId].messageId = message.id;
             Client.client.setInstance(guildId, instance);
         }
@@ -372,12 +387,25 @@ module.exports = {
         await module.exports.sendMessage(guildId, content, null, channelId);
     },
 
-    sendActivityNotificationMessage: async function (guildId, serverId, color, text, steamId, title = null, everyone = false) {
+    sendActivityNotificationMessage: async function (guildId, serverId, color, text, steamId, title = null,
+        everyone = false, options = {}) {
         const instance = Client.client.getInstance(guildId);
 
+        /* Teammates change their avatar about never, but they die, log in and
+           log out constantly — one scrape per event is what got the host
+           throttled by Steam in the first place. Notifications read the cache
+           the team-avatar priming step fills and accept a miss: the embed
+           already falls back to the default image when there is no URL. */
         let png = null;
         if (steamId !== null) {
-            png = await Scrape.scrapeSteamProfilePicture(Client.client, steamId);
+            const cacheDisabled = Config.battlemetrics.steamAvatarCacheMs === 0;
+            if (options.allowAvatarFetch === true || cacheDisabled) {
+                png = await Scrape.scrapeSteamProfilePicture(Client.client, steamId);
+            }
+            else {
+                const cached = Scrape.getCachedSteamProfilePicture(steamId);
+                png = cached === undefined ? null : cached;
+            }
         }
         const content = {
             embeds: [DiscordEmbeds.getActivityNotificationEmbed(guildId, serverId, color, text, steamId, png, title)]

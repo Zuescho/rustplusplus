@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const Scrape = require('./scrape');
+const Config = require('../../config');
 const messages = require('../languages/en.json');
 
 /* Formats against the real en.json so a message key that was never added
@@ -130,6 +131,7 @@ test('a page that loads but does not parse is reported as a markup change', asyn
 
 test('the avatar path reports failures and markup changes too', async () => {
     await withScrape({ status: 429, headers: {} }, async () => {
+        Scrape.clearAvatarCache();
         const client = makeClient();
         assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
         assert.match(client.logs[0].text, /profile picture/);
@@ -137,6 +139,7 @@ test('the avatar path reports failures and markup changes too', async () => {
     });
 
     await withScrape({ status: 200, data: '<html>no avatar</html>' }, async () => {
+        Scrape.clearAvatarCache();
         const client = makeClient();
         assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
         assert.match(client.logs[0].text, /found no avatar/);
@@ -144,9 +147,38 @@ test('the avatar path reports failures and markup changes too', async () => {
 
     const html = '<img src="https://avatars.example/abc_full.jpg" alt="x">';
     await withScrape({ status: 200, data: html }, async () => {
+        Scrape.clearAvatarCache();
         const client = makeClient();
         assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID),
             'https://avatars.example/abc_full.jpg');
+    });
+});
+
+/* One scrape per death/login event is what gets the host 429'd in the first
+   place, so the second lookup of the same player must not reach Steam. */
+test('a scraped avatar is served from cache on the next lookup', async () => {
+    const html = '<img src="https://avatars.example/abc_full.jpg" alt="x">';
+    await withScrape({ status: 200, data: html }, async (calls) => {
+        Scrape.clearAvatarCache();
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID),
+            'https://avatars.example/abc_full.jpg');
+        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID),
+            'https://avatars.example/abc_full.jpg');
+        assert.strictEqual(calls.length, 1, 'the second lookup should not hit Steam');
+    });
+});
+
+/* A throttled Steam answered on every death would both keep the traffic up and
+   repeat the same error line until it drowns the log. */
+test('a failed avatar lookup is not retried or re-logged immediately', async () => {
+    await withScrape({ status: 429, headers: {} }, async (calls) => {
+        Scrape.clearAvatarCache();
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
+        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
+        assert.strictEqual(calls.length, 1, 'the second lookup should not hit Steam');
+        assert.strictEqual(client.logs.length, 1, 'the failure should be logged once, not per event');
     });
 });
 
@@ -188,4 +220,130 @@ test('a vanity page that parses to nothing is reported as a markup change', asyn
         assert.strictEqual(await Scrape.scrapeSteamIdFromVanity(client, 'somebody'), null);
         assert.match(client.logs[0].text, /found no SteamID64/);
     });
+});
+
+/* The name cache is opt-in: a user typing a player into the add-player modal
+   wants the name Steam has right now, background callers do not. */
+test('the persona-name cache is only used when the caller asks for it', async () => {
+    const html = '<span class="actual_persona_name">Pablo</span>';
+
+    await withScrape({ status: 200, data: html }, async (calls) => {
+        Scrape.clearNameCache();
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), 'Pablo');
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), 'Pablo');
+        assert.strictEqual(calls.length, 1, 'the second cached lookup should not hit Steam');
+    });
+
+    await withScrape({ status: 200, data: html }, async (calls) => {
+        Scrape.clearNameCache();
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID), 'Pablo');
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID), 'Pablo');
+        assert.strictEqual(calls.length, 2, 'an uncached caller should always ask Steam');
+    });
+});
+
+test('a cached name failure is not retried or re-logged immediately', async () => {
+    await withScrape({ status: 403 }, async (calls) => {
+        Scrape.clearNameCache();
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), null);
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), null);
+        assert.strictEqual(calls.length, 1, 'the second lookup should not hit Steam');
+        assert.strictEqual(client.logs.length, 1, 'the failure should be logged once');
+    });
+});
+
+test('a name cache TTL of zero stores nothing', async () => {
+    const html = '<span class="actual_persona_name">Pablo</span>';
+    const original = Config.battlemetrics.steamNameCacheMs;
+    Config.battlemetrics.steamNameCacheMs = 0;
+    try {
+        await withScrape({ status: 200, data: html }, async (calls) => {
+            Scrape.clearNameCache();
+            const client = makeClient();
+            await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true });
+            await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true });
+            assert.strictEqual(calls.length, 2);
+        });
+    }
+    finally {
+        Config.battlemetrics.steamNameCacheMs = original;
+    }
+});
+
+/* "Disabled" has to mean disabled for failures too. Caching those anyway left a
+   TTL of 0 still short-circuiting five minutes of lookups after one transient
+   error, which is not the per-event scraping the setting documents. */
+test('a cache TTL of zero does not store failures either', async () => {
+    const original = Config.battlemetrics.steamAvatarCacheMs;
+    Config.battlemetrics.steamAvatarCacheMs = 0;
+    try {
+        await withScrape({ status: 429, headers: {} }, async (calls) => {
+            Scrape.clearAvatarCache();
+            const client = makeClient();
+            await Scrape.scrapeSteamProfilePicture(client, VALID_ID);
+            await Scrape.scrapeSteamProfilePicture(client, VALID_ID);
+            assert.strictEqual(calls.length, 2, 'a disabled cache must not suppress the second attempt');
+            assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), undefined);
+        });
+    }
+    finally {
+        Config.battlemetrics.steamAvatarCacheMs = original;
+    }
+});
+
+/* The resolver asks for a refresh precisely when it suspects the name it holds
+   is why its searches keep missing — serving that same name back from the cache
+   made the refresh a no-op until the TTL expired hours later. */
+test('a refresh bypasses the name cache but still writes to it', async () => {
+    let body = '<span class="actual_persona_name">OldName</span>';
+    await withScrape(() => ({ status: 200, data: body }), async (calls) => {
+        Scrape.clearNameCache();
+        const client = makeClient();
+
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), 'OldName');
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), 'OldName');
+        assert.strictEqual(calls.length, 1, 'the plain cached lookup should not hit Steam');
+
+        body = '<span class="actual_persona_name">NewName</span>';
+        assert.strictEqual(
+            await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true, refresh: true }), 'NewName');
+        assert.strictEqual(calls.length, 2, 'a refresh must reach Steam');
+
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true }), 'NewName',
+            'the refreshed name should have replaced the cached one');
+        assert.strictEqual(calls.length, 2);
+    });
+});
+
+/* Death and login notifications read this instead of scraping, so the three
+   states have to stay distinguishable: never fetched, fetched, known failure. */
+test('the cached avatar can be read back without touching the network', async () => {
+    Scrape.clearAvatarCache();
+    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), undefined);
+
+    const html = '<img src="https://avatars.example/abc_full.jpg" alt="x">';
+    await withScrape({ status: 200, data: html }, async () => {
+        await Scrape.scrapeSteamProfilePicture(makeClient(), VALID_ID);
+    });
+    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), 'https://avatars.example/abc_full.jpg');
+
+    Scrape.clearAvatarCache();
+    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), undefined);
+
+    await withScrape({ status: 403 }, async () => {
+        await Scrape.scrapeSteamProfilePicture(makeClient(), VALID_ID);
+    });
+    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), null);
+
+    Scrape.clearAvatarCache();
+});
+
+test('isValidSteamId accepts a 17-digit string and nothing else', () => {
+    assert.strictEqual(Scrape.isValidSteamId(VALID_ID), true);
+    for (const bad of ['', '123', 'notanid', Number(VALID_ID), null, undefined]) {
+        assert.strictEqual(Scrape.isValidSteamId(bad), false, `should reject ${JSON.stringify(bad)}`);
+    }
 });

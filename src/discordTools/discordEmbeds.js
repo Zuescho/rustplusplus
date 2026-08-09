@@ -205,7 +205,16 @@ module.exports = {
                Layout: `Name  [B](bmUrl) [S](steamUrl)`. Either link is omitted
                if the corresponding ID is missing. */
             const nameMaxLength = Constants.EMBED_FIELD_MAX_WIDTH_LENGTH_3;
-            const rawName = `${player.name || '-'}`;
+
+            /* A player whose Steam name has not resolved yet is stored as '-'
+               (or null). Rendering that literally puts a bare "- " at the start
+               of the line, which Discord reads as list syntax and swallows into
+               a bullet — the row then shows as nothing but its [S] link. Fall
+               back to whichever id we do have: it identifies the row, and the
+               heal path in battlemetricsHandler replaces it once the scrape
+               succeeds. */
+            const knownName = (player.name && player.name !== '-') ? player.name : null;
+            const rawName = `${knownName || player.steamId || player.playerId || '?'}`;
             const displayName = rawName.length <= nameMaxLength
                 ? rawName : rawName.substring(0, nameMaxLength - 2) + '..';
 

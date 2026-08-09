@@ -61,6 +61,15 @@ class Battlemetrics {
 
         this._serverEvaluation = new Object();
 
+        /* An instance that has never polled this server reports every player it
+           finds as "new", because it has nothing to compare against. That is a
+           startup artefact, not a login: the tracker handler clears this flag
+           on the first cycle it sees and skips notifications for that cycle
+           only. Set at construction so every path that builds an instance —
+           startup, a new active server, and above all un-pausing a tracker,
+           which drops and re-creates it — is covered. */
+        this.suppressNotifications = true;
+
         /* Init API parameter variables */
 
         this.server_name = null;
@@ -296,6 +305,11 @@ class Battlemetrics {
      */
     #parseProfileDataApiResponse(data) {
         const parsed = [];
+
+        /* A 200 without an `included` key is a normal Battlemetrics answer for
+           a profile with no recorded identifiers; iterating it threw a
+           TypeError all the way out through the unwrapped /players caller. */
+        if (!data || !Array.isArray(data.included)) return parsed;
 
         for (const name of data.included) {
             if (name.type !== 'identifier') continue;
@@ -641,7 +655,11 @@ class Battlemetrics {
         this.onlinePlayers = [];
         this.offlinePlayers = [];
 
-        const included = data.included;
+        /* A 200 that omits `included` is a normal answer for a server with
+           nobody on it. Iterating it unguarded threw out of the caller, which
+           is awaited un-wrapped by the poll cycle — one empty server would have
+           aborted the resolution pass and every tracker card, every cycle. */
+        const included = Array.isArray(data.included) ? data.included : [];
         for (const entity of included) {
             if (entity.type !== 'player') continue;
 

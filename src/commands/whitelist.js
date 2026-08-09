@@ -23,6 +23,7 @@ const Builder = require('@discordjs/builders');
 const Constants = require('../util/constants.js');
 const DiscordEmbeds = require('../discordTools/discordEmbeds.js');
 const Scrape = require('../util/scrape.js');
+const Utils = require('../util/utils.js');
 
 module.exports = {
 	name: 'whitelist',
@@ -124,11 +125,22 @@ module.exports = {
 			} break;
 
 			case 'show': {
-				let steamIds = '';
-				for (const steamId of instance.whitelist['steamIds']) {
-					const steamName = await getSteamName(client, steamId);
-					steamIds += `${steamName}\n`;
+				/* Same shape as /blacklist show: a serial loop here meant one
+				   15 s scraper timeout per entry, so a long whitelist against a
+				   blackholing Steam ran past the 15-minute interaction expiry
+				   and the command produced nothing at all. The field truncates
+				   at 1024 characters anyway, so there is nothing to gain from
+				   looking up past the cap. */
+				const all = instance.whitelist['steamIds'];
+				const names = await Utils.mapWithConcurrency(
+					all.slice(0, Constants.STEAM_NAME_LOOKUP_LIMIT),
+					Constants.STEAM_NAME_LOOKUP_CONCURRENCY,
+					async (steamId) => await getSteamName(client, steamId, true));
+				for (const steamId of all.slice(Constants.STEAM_NAME_LOOKUP_LIMIT)) {
+					names.push(`${steamId}`);
 				}
+
+				const steamIds = names.map(name => `${name}\n`).join('');
 
 				await client.interactionEditReply(interaction, {
 					embeds: [DiscordEmbeds.getEmbed({
@@ -159,8 +171,11 @@ function ensureWhitelist(instance) {
 	if (!instance.whitelist.hasOwnProperty('steamIds')) instance.whitelist['steamIds'] = [];
 }
 
-async function getSteamName(client, steamid) {
-	const steamName = await Scrape.scrapeSteamProfileName(client, steamid);
+/* `cache` is opt-in per caller: adding or removing an entry is a one-off the
+   user is watching, so it takes the live name, while `show` re-reads the whole
+   list on every invocation and is happy with names a few hours old. */
+async function getSteamName(client, steamid, cache = false) {
+	const steamName = await Scrape.scrapeSteamProfileName(client, steamid, { cache: cache });
 	if (steamName) return `${steamName} (${steamid})`;
 	return `${steamid}`;
 }
