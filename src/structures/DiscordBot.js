@@ -65,7 +65,6 @@ class DiscordBot extends Discord.Client {
         this.battlemetricsInstances = new Object();
 
         this.battlemetricsIntervalId = null;
-        this.battlemetricsIntervalCounter = 0;
 
         this.loadDiscordCommands();
         this.loadDiscordEvents();

@@ -154,10 +154,15 @@ function _isRepeatedTemplate(text) {
     return entry.hits.length >= REPEAT_THRESHOLD;
 }
 
-async function _libreTranslate(text, detected) {
-    const baseUrl = (Config.translate.libretranslateUrl || '').replace(/\/+$/, '');
-    const url = `${baseUrl}/translate`;
-    const source = FRANC_TO_LT[detected] || 'auto';
+/* LibreTranslate explains itself in the response body ("es is not supported"),
+   while axios only carries "Request failed with status code 400" — which is the
+   least useful half of the answer to put in the log. */
+function _libreErrorMessage(e) {
+    const detail = e.response && e.response.data && e.response.data.error;
+    return detail ? `${e.message} (${detail})` : e.message;
+}
+
+async function _libreTranslatePost(url, text, source) {
     const body = {
         q: text,
         source,
@@ -171,6 +176,35 @@ async function _libreTranslate(text, detected) {
         return response.data.translatedText;
     }
     return null;
+}
+
+async function _libreTranslate(text, detected) {
+    const baseUrl = (Config.translate.libretranslateUrl || '').replace(/\/+$/, '');
+    const url = `${baseUrl}/translate`;
+    const source = FRANC_TO_LT[detected] || 'auto';
+
+    try {
+        return await _libreTranslatePost(url, text, source);
+    }
+    catch (e) {
+        /* franc's guess is only a guess, and a self-hosted instance carries
+           whichever language pairs its operator installed. Asking for a pair it
+           does not have answers 400, so let LibreTranslate detect the source
+           itself instead of dropping the message. Short chat lines are exactly
+           where franc is least reliable, which is where this bites most. */
+        if (source === 'auto' || !e.response || e.response.status !== 400) {
+            e.message = _libreErrorMessage(e);
+            throw e;
+        }
+
+        try {
+            return await _libreTranslatePost(url, text, 'auto');
+        }
+        catch (retryError) {
+            retryError.message = _libreErrorMessage(retryError);
+            throw retryError;
+        }
+    }
 }
 
 /**

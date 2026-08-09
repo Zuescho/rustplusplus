@@ -40,10 +40,34 @@ module.exports = {
            (disables that component of the pacing). */
         requestSpacingMs: envInt('RPP_BM_REQUEST_SPACING_MS', 1500),
         requestJitterMs: envInt('RPP_BM_REQUEST_JITTER_MS', 1500),
-        /* Base delay between background Steam profile-name scrapes. The actual
-           wait is randomised between this and 2x this value, so a tracker with
-           many players doesn't fire a synchronised scrape burst at Steam. */
+        /* Base delay between background Steam scrapes. Only the teammate-avatar
+           backfill is paced by it now, one profile per interval, so a team that
+           reconnects with a cold cache repopulates gradually instead of firing
+           one request per member at once. */
         steamScrapeDelayMs: envInt('RPP_STEAM_SCRAPE_DELAY_MS', 1500),
+        /* Background Steam use is bootstrap-only: the one scheduled request the
+           tracker loop can make is the attempt to turn an unresolved SteamID
+           into a Battlemetrics playerId. Once a player has that id their name
+           comes from the Battlemetrics roster forever after. This is the
+           process-wide minimum gap between two such requests. */
+        steamResolveIntervalMs: envInt('RPP_STEAM_RESOLVE_INTERVAL_MS', 5 * 60 * 1000),
+        /* How many unresolved players the resolver examines per poll cycle.
+           Most cost nothing (they match the live roster); at most one of them
+           can reach Steam, and only if the interval above has elapsed. */
+        trackerResolvePerCycle: envInt('RPP_TRACKER_RESOLVE_PER_CYCLE', 3, 0),
+        /* How long a scraped Steam persona name stays reusable, for the callers
+           that opt into the cache (the tracker resolver and the blacklist /
+           whitelist listings). 0 disables the cache. */
+        steamNameCacheMs: envInt('RPP_STEAM_NAME_CACHE_MS', 6 * 60 * 60 * 1000),
+        /* How long a scraped Steam avatar URL stays reusable. Death and login
+           notifications scrape one per event, so an active team asks Steam for
+           the same handful of faces dozens of times an hour and gets 429'd for
+           it. Avatars change rarely enough that hours of staleness is a fair
+           trade. 0 disables the cache — which also switches off the background
+           team-avatar priming, because with nothing stored every member would
+           look uncached on every 10 s poll and the priming would become a
+           permanent request stream instead of the opt-out it is meant to be. */
+        steamAvatarCacheMs: envInt('RPP_STEAM_AVATAR_CACHE_MS', 6 * 60 * 60 * 1000),
         /* Battlemetrics API token. Their API now requires an authenticated
            (paid) key for the server/player endpoints this bot uses. This env
            var is only the fallback — the runtime source of truth is

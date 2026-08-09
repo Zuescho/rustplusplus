@@ -15,10 +15,21 @@
 */
 
 const BmRateLimiter = require('./battlemetricsRateLimiter.js');
+const Utils = require('./utils.js');
 
 const CACHE_TTL_MS = 60_000;
 const CACHE_FLOOR = 5;
 const MAX_RESULTS = 25;
+/* The resolver asks for a much bigger page than the dropdown does. filter[search]
+   is a substring match, so a short query easily fills 25 rows with near misses
+   and pushes a second, genuinely identical name onto page 2 — where the
+   "exactly one exact match" ambiguity guard cannot see it, and the tracker gets
+   linked to whichever of the two happened to land on page 1. */
+const RESOLVE_PAGE_SIZE = 100;
+/* Autocomplete writes one entry per keystroke prefix, per server. Without a cap
+   the map is retained for the process lifetime and grows with everything anyone
+   has ever typed. */
+const CACHE_MAX = 500;
 
 const _cache = new Map();
 
@@ -42,13 +53,25 @@ function _localMatches(bmInstance, query) {
     return matches.slice(0, MAX_RESULTS);
 }
 
-async function _apiSearch(serverId, query) {
-    const key = `${serverId}::${query.toLowerCase()}`;
+/* Returns `success` alongside the results because the two zero-length outcomes
+   have to be told apart: "this server has nobody by that name" is an answer the
+   tracker resolver may act on (and back off from), "Battlemetrics was down" is
+   not — burning a retry slot on an outage would push a perfectly resolvable
+   player into a 24-hour backoff. */
+async function _apiSearch(serverId, query, pageSize = MAX_RESULTS) {
+    /* The page size is part of the key: the resolver's 100-row answer and the
+       dropdown's 25-row answer are different pages of the same query, and
+       serving one from the other would either re-introduce the page-1
+       ambiguity blind spot or truncate the dropdown's own cache entry. */
+    const key = `${serverId}::${pageSize}::${query.toLowerCase()}`;
     const cached = _cache.get(key);
-    if (cached && (_now() - cached.at) < CACHE_TTL_MS) return cached.results;
+    if (cached && (_now() - cached.at) < CACHE_TTL_MS) {
+        return { results: cached.results, success: true, pageSize: pageSize };
+    }
+    if (cached) _cache.delete(key);
 
     const url = `https://api.battlemetrics.com/players?filter[search]=${encodeURIComponent(query)}` +
-        `&filter[servers]=${encodeURIComponent(serverId)}&page[size]=${MAX_RESULTS}`;
+        `&filter[servers]=${encodeURIComponent(serverId)}&page[size]=${pageSize}`;
     let results = [];
     let success = false;
     try {
@@ -70,8 +93,12 @@ async function _apiSearch(serverId, query) {
     /* Only cache successful responses (including a genuine "no matches"). A
        transient API error must not be cached, or it would suppress retries for
        the whole TTL even after the API recovers. */
-    if (success) _cache.set(key, { at: _now(), results });
-    return results;
+    if (success) {
+        /* Map iterates in insertion order, so the first key is the oldest. */
+        if (_cache.size >= CACHE_MAX) _cache.delete(_cache.keys().next().value);
+        _cache.set(key, { at: _now(), results });
+    }
+    return { results, success, pageSize };
 }
 
 /**
@@ -100,9 +127,9 @@ async function search(bmInstance, serverId, query) {
        can hold a request for >1.5s and the HTTP call itself takes time, so we
        race the API lookup against a hard budget and fall back to local-only
        results if it takes too long. */
-    const apiResults = await Promise.race([
+    const { results: apiResults } = await Promise.race([
         _apiSearch(serverId, trimmed),
-        new Promise(resolve => setTimeout(() => resolve([]), 2200)),
+        new Promise(resolve => setTimeout(() => resolve({ results: [], success: false }), 2200)),
     ]);
     const seen = new Set(local.map(p => p.id));
     const merged = [...local];
@@ -137,8 +164,17 @@ async function resolveNameById(bmInstance, playerId) {
         return bmInstance.players[playerId].name;
     }
 
-    for (const { results } of _cache.values()) {
-        const hit = results.find(r => r.id === playerId);
+    /* The TTL has to be honoured here too. Without it this scan could adopt a
+       name that was cached weeks ago and has since changed — and it would keep
+       walking entries that the keyed read in _apiSearch has long since
+       written off. */
+    const now = _now();
+    for (const [key, entry] of _cache) {
+        if ((now - entry.at) >= CACHE_TTL_MS) {
+            _cache.delete(key);
+            continue;
+        }
+        const hit = entry.results.find(r => r.id === playerId);
         if (hit && hit.name && hit.name !== playerId) return hit.name;
     }
 
@@ -154,4 +190,103 @@ async function resolveNameById(bmInstance, playerId) {
     return null;
 }
 
-module.exports = { search, resolveNameById };
+/**
+ * Find the one roster entry whose name matches exactly. Exactly one match wins:
+ * pointing a tracker at the wrong Battlemetrics profile is worse than leaving
+ * the row unresolved, and the `.find()` this replaces silently took whichever
+ * duplicate the roster happened to list first.
+ *
+ * Matching stays case-sensitive on purpose — a BM display name is a character-
+ * exact copy of the Steam persona, so folding case only invites mislinking
+ * `Bob` to `bob`.
+ *
+ * @param {object} bmInstance The Battlemetrics instance for the tracker's server, or null.
+ * @param {string} name       The name to match.
+ * @param {Map<string, Array<string>>} [index] A prebuilt index from
+ *      buildRosterIndex. The resolver runs this match for every unresolved row
+ *      on every poll, and a roster accumulates every player seen during the bot
+ *      run — re-normalising all of them per row is the one place this gets
+ *      expensive. Omit it and the roster is walked directly, which is what
+ *      every one-off caller wants.
+ * @returns {string|null} The BM player ID, or null when zero or several match.
+ */
+function matchRosterName(bmInstance, name, index = null) {
+    const target = Utils.normalizePlayerName(name);
+    if (!target) return null;
+
+    if (index) {
+        const hits = index.get(target);
+        return hits && hits.length === 1 ? hits[0] : null;
+    }
+
+    if (!bmInstance || !bmInstance.players) return null;
+    const hits = Object.keys(bmInstance.players)
+        .filter(id => Utils.normalizePlayerName(bmInstance.players[id].name) === target);
+    return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Normalised roster name -> every player id carrying it. Duplicates are kept so
+ * the caller can still refuse to guess between two identically named players.
+ *
+ * @param {object} bmInstance The Battlemetrics instance, or null.
+ * @returns {Map<string, Array<string>>}
+ */
+function buildRosterIndex(bmInstance) {
+    const index = new Map();
+    if (!bmInstance || !bmInstance.players) return index;
+
+    for (const [id, player] of Object.entries(bmInstance.players)) {
+        const key = Utils.normalizePlayerName(player && player.name);
+        if (!key) continue;
+        const existing = index.get(key);
+        if (existing) existing.push(id);
+        else index.set(key, [id]);
+    }
+    return index;
+}
+
+/**
+ * Turn a player name into a Battlemetrics player ID: the live roster first
+ * (free), then the search API.
+ *
+ * Unlike `search()` this is not raced against a response budget — it runs from
+ * the background poll, so waiting on the rate-limited queue is exactly right.
+ *
+ * @param {object} bmInstance  The Battlemetrics instance for the tracker's server, or null.
+ * @param {string} bmServerId  The BM server ID (scopes the API search).
+ * @param {string} name        The name to resolve.
+ * @returns {Promise<{id: string|null, apiFailed: boolean}>}
+ */
+async function resolveIdByName(bmInstance, bmServerId, name) {
+    const target = Utils.normalizePlayerName(name);
+    if (!target) return { id: null, apiFailed: false };
+
+    const local = matchRosterName(bmInstance, target);
+    if (local) return { id: local, apiFailed: false };
+
+    /* The live roster only holds players seen online during this bot run, so
+       someone who has been offline the whole time can never match locally —
+       filter[search] does find them. A single character is refused because that
+       filter then returns an essentially arbitrary page of the server's
+       population, which would mislink rather than fail. */
+    if (!bmServerId || target.length < 2) return { id: null, apiFailed: false };
+
+    const { results, success, pageSize } = await _apiSearch(bmServerId, target, RESOLVE_PAGE_SIZE);
+    if (!success) return { id: null, apiFailed: true };
+
+    const hits = results.filter(r => Utils.normalizePlayerName(r.name) === target);
+    if (hits.length !== 1) return { id: null, apiFailed: false };
+
+    /* A full page means there is a page 2 we did not look at, so "exactly one
+       exact match" is only a claim about the rows we happened to receive. A
+       second account with the identical name could be sitting just past the
+       cut, and linking the tracker to the wrong human is worse than leaving
+       the row unresolved — the roster path will link it correctly the moment
+       they come online. */
+    if (results.length >= pageSize) return { id: null, apiFailed: false };
+
+    return { id: String(hits[0].id), apiFailed: false };
+}
+
+module.exports = { search, resolveNameById, resolveIdByName, matchRosterName, buildRosterIndex };

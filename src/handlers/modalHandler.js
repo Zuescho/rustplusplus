@@ -21,10 +21,12 @@
 const Discord = require('discord.js');
 
 const Battlemetrics = require('../structures/Battlemetrics');
+const BattlemetricsHandler = require('./battlemetricsHandler.js');
 const BmToken = require('../util/battlemetricsToken.js');
 const Constants = require('../util/constants.js');
 const DiscordMessages = require('../discordTools/discordMessages.js');
 const Keywords = require('../util/keywords.js');
+const PlayerSearch = require('../util/battlemetricsPlayerSearch.js');
 const Scrape = require('../util/scrape.js');
 const TrackerInputParser = require('../util/trackerInputParser.js');
 
@@ -113,9 +115,6 @@ module.exports = async (client, interaction) => {
         }));
 
         await DiscordMessages.sendServerMessage(interaction.guildId, ids.serverId);
-
-        /* To force search of player name via scrape */
-        client.battlemetricsIntervalCounter = 0;
     }
     else if (interaction.customId.startsWith('SmartSwitchEdit')) {
         const ids = JSON.parse(interaction.customId.replace('SmartSwitchEdit', ''));
@@ -335,8 +334,12 @@ module.exports = async (client, interaction) => {
 
         tracker.name = trackerName;
         if (trackerClanTag !== tracker.clanTag) {
+            /* Rewrite the stored names right here. This used to only set the
+               field and leave the names to the next Steam re-scrape, so the tag
+               change looked like it had done nothing for up to a day. */
+            const oldTag = tracker.clanTag;
             tracker.clanTag = trackerClanTag;
-            client.battlemetricsIntervalCounter = 0;
+            BattlemetricsHandler.retagTrackerPlayerNames(tracker, oldTag, trackerClanTag);
         }
 
         /* Same reasoning as the server modal above: with no API token there is
@@ -408,13 +411,26 @@ module.exports = async (client, interaction) => {
                 return;
             }
             steamId = resolvedSteamId;
-            name = await Scrape.scrapeSteamProfileName(client, steamId);
 
-            if (name && bmInstance) {
-                playerId = Object.keys(bmInstance.players).find(
-                    e => bmInstance.players[e]['name'] === name);
-                if (!playerId) playerId = null;
+            if (tracker.players.some(e => e.steamId === steamId)) {
+                interaction.deferUpdate();
+                return;
             }
+
+            /* Cached, like every other Steam caller. Populating a tracker after
+               a wipe is thirty modal submissions in a couple of minutes, and
+               thirty unpaced profile GETs from one host is several times the
+               whole background budget — Steam then refuses us, the failures are
+               cached, and the resolver's own lookups come back empty without
+               ever reaching the network. A persona name a few hours old is
+               plenty for a row that exists to be matched against a roster. */
+            name = await Scrape.scrapeSteamProfileName(client, steamId, { cache: true });
+
+            /* Roster match only — an HTTP lookup here would blow Discord's 3 s
+               interaction budget. A player who isn't on the roster right now is
+               linked by the resolution pass on the next poll cycle, at no Steam
+               cost, because it matches this stored name against the roster. */
+            if (name) playerId = PlayerSearch.matchRosterName(bmInstance, name);
         }
         else if (parsed.type === 'steamId') {
             steamId = parsed.value;
@@ -424,18 +440,20 @@ module.exports = async (client, interaction) => {
                 return;
             }
 
-            name = await Scrape.scrapeSteamProfileName(client, steamId);
+            /* Cached — same reasoning as the vanity branch above. */
+            name = await Scrape.scrapeSteamProfileName(client, steamId, { cache: true });
 
-            if (name && bmInstance) {
-                playerId = Object.keys(bmInstance.players).find(
-                    e => bmInstance.players[e]['name'] === name);
-                if (!playerId) playerId = null;
-            }
+            if (name) playerId = PlayerSearch.matchRosterName(bmInstance, name);
         }
         else if (parsed.type === 'battlemetricsId') {
             playerId = parsed.value;
 
-            if (tracker.players.some(e => e.playerId === playerId && e.steamId === null)) {
+            /* Any row already pointing at this Battlemetrics player, whether or
+               not it also carries a SteamID. The old `&& e.steamId === null`
+               let the same human be added twice — once by BM id, once by
+               SteamID — and every login then produced doubled notifications and
+               doubled activity samples once the resolver linked the second row. */
+            if (tracker.players.some(e => e.playerId === playerId)) {
                 interaction.deferUpdate();
                 return;
             }
@@ -457,14 +475,17 @@ module.exports = async (client, interaction) => {
             name = `${tracker.clanTag} ${name}`;
         }
 
-        tracker.players.push({
+        tracker.players.push(BattlemetricsHandler.makeTrackerPlayer({
             name: name,
             steamId: steamId,
             playerId: playerId,
-            /* Stamp now so the periodic re-scrape skips this player until
-               STEAM_NAME_REFRESH_MS has elapsed. */
-            steamNameLastScrapedAt: steamId ? Date.now() : 0
-        });
+            /* Only stamp a scrape that actually produced a name — a stamped
+               failure would claim we know this player's Steam name when we do
+               not. Nothing gates on the field any more, but a downgrade to an
+               older build must not read it as "never scraped" and re-scrape
+               the world. */
+            steamNameLastScrapedAt: (steamId && name) ? Date.now() : 0
+        }));
         client.setInstance(interaction.guildId, instance);
 
         client.log(client.intlGet(null, 'infoCap'), client.intlGet(null, 'modalValueChange', {

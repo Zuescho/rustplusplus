@@ -146,25 +146,46 @@ module.exports = {
         return undefined;
     },
 
-    getMessageById: async function (guildId, channelId, messageId) {
+    /**
+     *  Fetch a message, and say whether a miss was final.
+     *
+     *  The distinction matters because callers that keep a messageId around
+     *  (the server, tracker, switch, alarm and storage-monitor cards) treat
+     *  "not found" as permission to post a fresh card and repoint the stored
+     *  id. A 429 or a 5xx on the first fetch after startup is not that: acting
+     *  on it orphans the old card and, with one edit per tracker per minute,
+     *  a sustained Discord outage leaves a duplicate per tracker per minute.
+     *
+     *  @return {Promise<{message: object|undefined, transient: boolean}>}
+     *      `transient` is true when the message may well still exist and the
+     *      caller should simply do nothing this time.
+     */
+    fetchMessageById: async function (guildId, channelId, messageId) {
         const guild = module.exports.getGuild(guildId);
+        if (!guild) return { message: undefined, transient: true };
 
-        if (guild) {
-            const channel = module.exports.getTextChannelById(guildId, channelId);
+        const channel = module.exports.getTextChannelById(guildId, channelId);
+        if (!channel) return { message: undefined, transient: false };
 
-            if (channel) {
-                try {
-                    const message = await channel.messages.fetch(messageId);
-                    if (message instanceof Map) return await message.get(messageId);
-                    return message;
-                }
-                catch (e) {
-                    Client.client.log(Client.client.intlGet(null, 'errorCap'),
-                        Client.client.intlGet(null, 'couldNotFindMessage', { message: messageId }), 'error');
-                }
-            }
+        try {
+            const message = await channel.messages.fetch(messageId);
+            if (message instanceof Map) return { message: await message.get(messageId), transient: false };
+            return { message: message, transient: false };
         }
-        return undefined;
+        catch (e) {
+            /* 10008 Unknown Message / 10003 Unknown Channel are Discord telling
+               us it is really gone. Anything else — rate limits, 5xx, a network
+               blip, a momentary permission problem — leaves the question open. */
+            const gone = e && (e.code === 10008 || e.code === 10003);
+            Client.client.log(Client.client.intlGet(null, 'errorCap'),
+                Client.client.intlGet(null, 'couldNotFindMessage', { message: messageId }), 'error');
+            return { message: undefined, transient: !gone };
+        }
+    },
+
+    getMessageById: async function (guildId, channelId, messageId) {
+        const { message } = await module.exports.fetchMessageById(guildId, channelId, messageId);
+        return message;
     },
 
     deleteMessageById: async function (guildId, channelId, messageId) {

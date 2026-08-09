@@ -159,6 +159,20 @@ function isValidUrl(url) {
     return false;
 }
 
+/* Pairing notifications are keyed by ip-port. When that key is unknown the pairing is dropped, so say which key
+   arrived and which ones we know about instead of returning silently. */
+function logUnknownPairingServer(client, guild, entityName, serverId, instance) {
+    const known = Object.keys(instance.serverList);
+    client.log('FCM LITE', `GuildID: ${guild.id}, pairing: entity: ${entityName} ignored, ` +
+        `server ${serverId} is not paired. Known servers: ${known.length ? known.join(', ') : 'none'}.`);
+}
+
+function logDisconnectedPairing(client, guild, entityName, serverId, entityId, rustplus) {
+    const active = rustplus ? rustplus.serverId : 'none';
+    client.log('FCM LITE', `GuildID: ${guild.id}, pairing: entity: ${entityName} ${entityId} stored for ` +
+        `${serverId}, but the bot is connected to ${active}. State will be resolved once connected.`);
+}
+
 async function pairingServer(client, guild, steamId, title, message, body) {
     const instance = client.getInstance(guild.id);
     const serverId = `${body.ip}-${body.port}`;
@@ -182,7 +196,10 @@ async function pairingServer(client, guild, steamId, title, message, body) {
 async function pairingEntitySwitch(client, guild, title, message, body) {
     const instance = client.getInstance(guild.id);
     const serverId = `${body.ip}-${body.port}`;
-    if (!instance.serverList.hasOwnProperty(serverId)) return;
+    if (!instance.serverList.hasOwnProperty(serverId)) {
+        logUnknownPairingServer(client, guild, 'Switch', serverId, instance);
+        return;
+    }
     const switches = instance.serverList[serverId].switches;
 
     const entityExist = instance.serverList[serverId].switches.hasOwnProperty(body.entityId);
@@ -224,15 +241,23 @@ async function pairingEntitySwitch(client, guild, title, message, body) {
             instance.serverList[serverId].switches[body.entityId].active = info.entityInfo.payload.value;
         }
         client.setInstance(guild.id, instance);
-
-        await DiscordMessages.sendSmartSwitchMessage(guild.id, serverId, body.entityId);
     }
+    else {
+        logDisconnectedPairing(client, guild, 'Switch', serverId, body.entityId, rustplus);
+    }
+
+    /* Post the switch card even while disconnected, the same way Smart Alarms do. The live state is filled in
+       by SetupSwitches once the bot connects to that server. */
+    await DiscordMessages.sendSmartSwitchMessage(guild.id, serverId, body.entityId);
 }
 
 async function pairingEntitySmartAlarm(client, guild, title, message, body) {
     const instance = client.getInstance(guild.id);
     const serverId = `${body.ip}-${body.port}`;
-    if (!instance.serverList.hasOwnProperty(serverId)) return;
+    if (!instance.serverList.hasOwnProperty(serverId)) {
+        logUnknownPairingServer(client, guild, 'Smart Alarm', serverId, instance);
+        return;
+    }
     const alarms = instance.serverList[serverId].alarms;
 
     const entityExist = instance.serverList[serverId].alarms.hasOwnProperty(body.entityId);
@@ -281,7 +306,10 @@ async function pairingEntitySmartAlarm(client, guild, title, message, body) {
 async function pairingEntityStorageMonitor(client, guild, title, message, body) {
     const instance = client.getInstance(guild.id);
     const serverId = `${body.ip}-${body.port}`;
-    if (!instance.serverList.hasOwnProperty(serverId)) return;
+    if (!instance.serverList.hasOwnProperty(serverId)) {
+        logUnknownPairingServer(client, guild, 'Storage Monitor', serverId, instance);
+        return;
+    }
     const storageMonitors = instance.serverList[serverId].storageMonitors;
 
     const entityExist = instance.serverList[serverId].storageMonitors.hasOwnProperty(body.entityId);

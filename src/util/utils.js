@@ -69,6 +69,34 @@ module.exports = {
         return str.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
     },
 
+    /* Names have to be compared the same way on both sides of a match. The
+       Battlemetrics roster is stripped of invisible characters on ingest while
+       a scraped Steam persona is not, so a single zero-width character in a
+       name made every exact match fail and left the player unlinked forever. */
+    normalizePlayerName: function (str) {
+        return module.exports.removeInvisibleCharacters(`${str ?? ''}`).trim();
+    },
+
+    /* Map with a fixed number of workers, preserving input order. Used where a
+       list command would otherwise choose between an N-wide burst that gets the
+       host 403'd by Steam and a serial loop that can outlive the interaction. */
+    mapWithConcurrency: async function (items, limit, fn) {
+        const results = new Array(items.length);
+        let next = 0;
+
+        const worker = async () => {
+            while (true) {
+                const index = next;
+                next += 1;
+                if (index >= items.length) return;
+                results[index] = await fn(items[index], index);
+            }
+        };
+
+        await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+        return results;
+    },
+
     findClosestString: function (string, array, threshold = 2) {
         let minDistance = Infinity;
         let closestString = null;
