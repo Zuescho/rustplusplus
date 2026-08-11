@@ -39,6 +39,19 @@ const _cache = new Map();
    Mirrors _warnedBadSteamIds / _warnedDuplicateLinks in battlemetricsHandler. */
 const _warnedSearchFailures = new Set();
 
+/* Both callers promise never to throw into the Discord autocomplete handler,
+   and one of these sites sits outside its try block — so logging must not be
+   able to break that promise. Client.client is undefined until index.ts reaches
+   its last line, and this module is inside that require cycle. Same guard as
+   activityDb._logDisabled. */
+function _log(key, args) {
+    try {
+        Client.client.log(Client.client.intlGet(null, 'warningCap'),
+            Client.client.intlGet(null, key, args));
+    }
+    catch (e) { /* nothing to log with */ }
+}
+
 function _now() { return Date.now(); }
 
 function _localMatches(bmInstance, query) {
@@ -118,11 +131,7 @@ async function _apiSearch(serverId, query, pageSize = MAX_RESULTS) {
         const warnKey = `${serverId}::${failReason}`;
         if (!_warnedSearchFailures.has(warnKey)) {
             _warnedSearchFailures.add(warnKey);
-            Client.client.log(Client.client.intlGet(null, 'warningCap'),
-                Client.client.intlGet(null, 'battlemetricsPlayerSearchFailed', {
-                    serverId: serverId,
-                    reason: failReason
-                }));
+            _log('battlemetricsPlayerSearchFailed', { serverId: serverId, reason: failReason });
         }
     }
     else if (_warnedSearchFailures.size > 0) {
@@ -236,11 +245,10 @@ async function resolveNameById(bmInstance, playerId) {
            With no token configured scheduleGet throws immediately; that is a
            switched-off integration, not a failure worth reporting. */
         if (BmToken.isEnabled()) {
-            Client.client.log(Client.client.intlGet(null, 'warningCap'),
-                Client.client.intlGet(null, 'battlemetricsNameLookupFailed', {
-                    playerId: playerId,
-                    error: e.response ? `HTTP ${e.response.status}` : (e.code || e.message)
-                }));
+            _log('battlemetricsNameLookupFailed', {
+                playerId: playerId,
+                error: e.response ? `HTTP ${e.response.status}` : (e.code || e.message)
+            });
         }
     }
 

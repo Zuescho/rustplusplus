@@ -56,8 +56,20 @@ module.exports = {
                    calls clearInterval(this.pollingTaskId), which would kill the
                    poll loop over a failed chat line. */
                 rustplus.sendTeamMessageAsync(messageFromQueue).then((response) => {
-                    const failed = !response || response.error !== undefined ||
-                        response instanceof Error;
+                    /* `hasOwnProperty`, not `!== undefined`. A successful reply
+                       is a decoded protobuf AppResponse, and `error` is an
+                       optional field — protobufjs puts `error: null` on the
+                       PROTOTYPE, so `response.error !== undefined` is true even
+                       when the send worked, which would report every delivered
+                       message as dropped. Same idiom as
+                       RustPlus.isResponseValid and Team.changeLeadership.
+
+                       This covers all four shapes: a success (no own `error`),
+                       a failure AppResponse and the bare AppError it rejects
+                       with (both own `error`), the {error: 'tokensDidNotReplenish'}
+                       literal, and a timeout, which arrives as an Error. */
+                    const failed = !response || response instanceof Error ||
+                        Object.prototype.hasOwnProperty.call(response, 'error');
                     if (failed) {
                         /* One line per outage, not one per queued message: a
                            dead socket drains the whole queue at once. */

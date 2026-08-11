@@ -1023,10 +1023,12 @@ module.exports = {
             budget -= 1;
 
             let hours = null;
+            let threw = false;
             try {
                 hours = await candidate.bmInstance.getRustLifetimeHours(candidate.playerId);
             }
             catch (e) {
+                threw = true;
                 /* Treated exactly like an empty answer: stamp the attempt and
                    move on, so a persistent failure costs one request per
                    interval instead of one per cycle. */
@@ -1045,7 +1047,14 @@ module.exports = {
                Battlemetrics#logRequestFailure and a throw is logged above,
                while this path is neither: hours stays null, the timestamp is
                stamped anyway, and every hours column stays blank forever. */
-            if (hours === null) {
+            if (threw) {
+                /* A throw is already logged above, and counting it here would
+                   send the operator hunting a response-shape change while the
+                   real cause — an outage or a revoked token — sits two lines
+                   up in the same log. Only a genuine 200-with-no-playtime
+                   feeds the counter. */
+            }
+            else if (hours === null) {
                 _playtimeConsecutiveEmpty += 1;
                 if (!_playtimeEverSucceeded && !_warnedPlaytimeUnavailable &&
                     _playtimeConsecutiveEmpty >= PLAYTIME_EMPTY_WARN_THRESHOLD) {
