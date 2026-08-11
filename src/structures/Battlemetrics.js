@@ -24,6 +24,11 @@ const Utils = require('../util/utils.js');
 const BmRateLimiter = require('../util/battlemetricsRateLimiter.js');
 const BmToken = require('../util/battlemetricsToken.js');
 
+/* Battlemetrics' own id for Rust, as it appears in a server's game
+   relationship. Profiles span every game the site tracks, so this is what
+   separates Rust hours from the rest. */
+const RUST_GAME_ID = 'rust';
+
 const SERVER_LOG_SIZE = 1000;
 const CONNECTION_LOG_SIZE = 1000;
 const PLAYER_CONNECTION_LOG_SIZE = 100;
@@ -193,6 +198,25 @@ class Battlemetrics {
     }
 
     /**
+     *  Construct the Battlemetrics API call for getting a player's per-server
+     *  playtime. Every included server carries `meta.timePlayed` (seconds) and
+     *  the game it belongs to, which is what lifetime hours are summed from.
+     *
+     *  The sparse fieldset is not cosmetic. A server is included in full by
+     *  default — every tag, the whole rust_description, the map details — and a
+     *  player who has been on 186 of them answers with 938 KB of data we throw
+     *  away to read one number per entry. Asking for the name alone brings the
+     *  same 186 servers back in 54 KB. `meta` and the game relationship sit
+     *  outside `attributes`, so neither is affected by the restriction.
+     *
+     *  @param {number} id The id of the player.
+     *  @return {string} The Battlemetrics API call string.
+     */
+    GET_PLAYER_PLAYTIME_API_CALL(id) {
+        return `https://api.battlemetrics.com/players/${id}?include=server&fields[server]=name`;
+    }
+
+    /**
      *  Construct the Battlemetrics API call for getting most time played data.
      *  @param {number} id The id of the server.
      *  @param {number} days The number of days before today to look.
@@ -326,6 +350,45 @@ class Battlemetrics {
         }
 
         return parsed;
+    }
+
+    /**
+     *  Sum a player's Rust playtime across every server Battlemetrics has seen
+     *  them on.
+     *
+     *  Only servers whose game is Rust count — a Battlemetrics profile spans
+     *  every game the site tracks, so summing blindly would add someone's DayZ
+     *  hours to their Rust total. Servers without a `meta` block are ones the
+     *  API returned for a different reason than playtime; they carry no number
+     *  to add.
+     *
+     *  @param {object} data The data to be parsed.
+     *  @return {number|null} Seconds played, or null when the response carries
+     *                        no Rust playtime at all (private profile, or an
+     *                        answer without the meta blocks).
+     */
+    #parseRustPlaytimeApiResponse(data) {
+        if (!data || !Array.isArray(data.included)) return null;
+
+        let seconds = 0;
+        let found = false;
+
+        for (const entity of data.included) {
+            if (entity.type !== 'server') continue;
+            if (!entity.relationships || !entity.relationships.game) continue;
+            if (entity.relationships.game.data?.id !== RUST_GAME_ID) continue;
+
+            const timePlayed = entity.meta ? entity.meta.timePlayed : undefined;
+            if (typeof timePlayed !== 'number' || !Number.isFinite(timePlayed) || timePlayed < 0) continue;
+
+            seconds += timePlayed;
+            found = true;
+        }
+
+        /* Zero is a real answer (a brand new profile), "we learnt nothing" is
+           not — the caller has to be able to tell them apart, or a private
+           profile would be rendered as a confident "0 h". */
+        return found ? seconds : null;
     }
 
     /**
@@ -521,6 +584,24 @@ class Battlemetrics {
         if (!data) return [];
 
         return this.#parseProfileDataApiResponse(data);
+    }
+
+    /**
+     *  Get a player's lifetime Rust playtime.
+     *
+     *  This is Battlemetrics' number, not Steam's: it counts only time on
+     *  servers Battlemetrics tracks, so it is a floor rather than the figure
+     *  the Steam library shows.
+     *
+     *  @param {string} playerId The id of the player.
+     *  @return {number|null} Hours played, or null when unavailable.
+     */
+    async getRustLifetimeHours(playerId) {
+        const data = await this.request(this.GET_PLAYER_PLAYTIME_API_CALL(playerId));
+        if (!data) return null;
+
+        const seconds = this.#parseRustPlaytimeApiResponse(data);
+        return seconds === null ? null : seconds / 3600;
     }
 
     /**

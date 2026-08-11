@@ -55,6 +55,16 @@ module.exports = {
            Most cost nothing (they match the live roster); at most one of them
            can reach Steam, and only if the interval above has elapsed. */
         trackerResolvePerCycle: envInt('RPP_TRACKER_RESOLVE_PER_CYCLE', 3, 0),
+        /* Lifetime Rust hours shown on the tracker card. One Battlemetrics
+           request per player per refresh, so the cost is bounded by how often
+           a player goes stale rather than by roster size. 0 switches the
+           feature off — nothing is fetched and nothing is rendered. */
+        trackerHoursRefreshMs: envInt('RPP_TRACKER_HOURS_REFRESH_MS', 24 * 60 * 60 * 1000, 0),
+        /* How many of those refreshes a single poll cycle may spend. Kept at
+           one so the pass adds at most one request per cycle to the shared
+           Battlemetrics queue, however many players are tracked — a big roster
+           takes longer to fill in rather than arriving as a burst. */
+        trackerHoursPerCycle: envInt('RPP_TRACKER_HOURS_PER_CYCLE', 1, 0),
         /* How long a scraped Steam persona name stays reusable, for the callers
            that opt into the cache (the tracker resolver and the blacklist /
            whitelist listings). 0 disables the cache. */

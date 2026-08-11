@@ -575,3 +575,163 @@ test('consumeSuppressionFlags tolerates a missing instance', () => {
     const client = { battlemetricsInstances: { 'gone': undefined, 'quiet': { lastUpdateSuccessful: true } } };
     assert.strictEqual(BattlemetricsHandler.consumeSuppressionFlags(client).size, 0);
 });
+
+/* --------------------------------------------------------------------------
+   Lifetime Rust hours
+   -------------------------------------------------------------------------- */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/* A tracker whose Battlemetrics instance answers playtime lookups from a map,
+   recording which ids were actually asked about. */
+function makePlaytimeClient(players, { hours = {}, guildId = 'guild' } = {}) {
+    const asked = [];
+    const bmInstance = {
+        players: {},
+        lastUpdateSuccessful: true,
+        getRustLifetimeHours: async (playerId) => {
+            asked.push(playerId);
+            const value = hours[playerId];
+            return value === undefined ? null : value;
+        }
+    };
+
+    const client = makeClient({
+        [guildId]: {
+            instance: { trackers: { '0': { name: 'Tracker', battlemetricsId: 'bm-server', players: players } } },
+            battlemetricsInstances: { 'bm-server': bmInstance }
+        }
+    });
+    client.asked = asked;
+    return client;
+}
+
+test('runPlaytimePass fills in the stalest player first and stamps the attempt', async () => {
+    const now = Date.now();
+    const fresh = { name: 'Fresh', playerId: '1', rustHours: 10, rustHoursUpdatedAt: now };
+    const stale = { name: 'Stale', playerId: '2', rustHours: 20, rustHoursUpdatedAt: now - 2 * DAY_MS };
+    const never = { name: 'Never', playerId: '3', rustHours: null, rustHoursUpdatedAt: 0 };
+
+    const client = makePlaytimeClient([fresh, stale, never], { hours: { '2': 1234, '3': 42 } });
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+
+    /* One request per cycle by default, spent on the row that has never been
+       filled in rather than on a refresh. */
+    assert.deepStrictEqual(client.asked, ['3']);
+    assert.strictEqual(never.rustHours, 42);
+    assert.ok(never.rustHoursUpdatedAt >= now);
+
+    /* Untouched this cycle — they get their turn on the following ones. */
+    assert.strictEqual(stale.rustHours, 20);
+    assert.strictEqual(stale.rustHoursUpdatedAt, now - 2 * DAY_MS);
+    assert.strictEqual(fresh.rustHours, 10);
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+    assert.deepStrictEqual(client.asked, ['3', '2']);
+    assert.strictEqual(stale.rustHours, 1234);
+});
+
+test('runPlaytimePass leaves a fresh roster alone entirely', async () => {
+    const now = Date.now();
+    const players = [
+        { name: 'A', playerId: '1', rustHours: 10, rustHoursUpdatedAt: now },
+        { name: 'B', playerId: '2', rustHours: 20, rustHoursUpdatedAt: now - 60000 }
+    ];
+    const client = makePlaytimeClient(players, { hours: { '1': 999, '2': 999 } });
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+
+    assert.deepStrictEqual(client.asked, [], 'nothing was stale enough to be worth a request');
+    assert.strictEqual(client.setInstanceCalls.length, 0);
+});
+
+/* The figure belongs to the human, not to the tracker they appear on. */
+test('runPlaytimePass spends one request on a player tracked in two guilds', async () => {
+    const rowA = { name: 'Pablo', playerId: '7', rustHours: null, rustHoursUpdatedAt: 0 };
+    const rowB = { name: 'Pablo', playerId: '7', rustHours: null, rustHoursUpdatedAt: 0 };
+
+    const asked = [];
+    const bmInstance = {
+        players: {},
+        lastUpdateSuccessful: true,
+        getRustLifetimeHours: async (playerId) => {
+            asked.push(playerId);
+            return 3000;
+        }
+    };
+    const client = makeClient({
+        guildA: {
+            instance: { trackers: { '0': { battlemetricsId: 'bm-server', players: [rowA] } } },
+            battlemetricsInstances: { 'bm-server': bmInstance }
+        },
+        guildB: {
+            instance: { trackers: { '0': { battlemetricsId: 'bm-server', players: [rowB] } } },
+            battlemetricsInstances: {}
+        }
+    });
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+
+    assert.deepStrictEqual(asked, ['7'], 'one lookup answers for every row that shares the id');
+    assert.strictEqual(rowA.rustHours, 3000);
+    assert.strictEqual(rowB.rustHours, 3000, 'the other guild must get the answer too');
+    assert.deepStrictEqual(client.setInstanceCalls.map(e => e.guildId).sort(), ['guildA', 'guildB']);
+});
+
+/* A private profile answers with nothing forever. Re-asking every cycle would
+   spend the whole budget on it and starve everyone else. */
+test('runPlaytimePass stamps a failed lookup and keeps the previous figure', async () => {
+    const player = { name: 'Private', playerId: '9', rustHours: 500, rustHoursUpdatedAt: 0 };
+    const client = makePlaytimeClient([player], { hours: {} });
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+
+    assert.deepStrictEqual(client.asked, ['9']);
+    assert.strictEqual(player.rustHours, 500, 'a failed refresh must not blank the card');
+    assert.ok(player.rustHoursUpdatedAt > 0, 'the attempt is recorded so it backs off to one a day');
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+    assert.deepStrictEqual(client.asked, ['9'], 'not re-asked on the very next cycle');
+});
+
+test('runPlaytimePass survives a lookup that throws', async () => {
+    const player = { name: 'Boom', playerId: '9', rustHours: null, rustHoursUpdatedAt: 0 };
+    const client = makePlaytimeClient([player]);
+    client.battlemetricsInstances['bm-server'].getRustLifetimeHours = async () => {
+        throw new Error('502 Bad Gateway');
+    };
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+
+    assert.strictEqual(player.rustHours, null);
+    assert.ok(player.rustHoursUpdatedAt > 0);
+    assert.strictEqual(client.logs.length, 1);
+});
+
+test('collectPlaytimeCandidates skips paused trackers, failing servers and unlinked rows', () => {
+    const linked = { name: 'Linked', playerId: '1', rustHoursUpdatedAt: 0 };
+    const unlinked = { name: 'Unlinked', playerId: null, steamId: VALID_ID, rustHoursUpdatedAt: 0 };
+    const paused = { name: 'Paused', playerId: '2', rustHoursUpdatedAt: 0 };
+    const broken = { name: 'Broken', playerId: '3', rustHoursUpdatedAt: 0 };
+
+    const client = makeClient({
+        guild: {
+            instance: {
+                trackers: {
+                    '0': { battlemetricsId: 'bm-server', players: [linked, unlinked] },
+                    '1': { battlemetricsId: 'bm-server', active: false, players: [paused] },
+                    '2': { battlemetricsId: 'bm-broken', players: [broken] }
+                }
+            },
+            battlemetricsInstances: {
+                'bm-server': { players: {}, lastUpdateSuccessful: true },
+                'bm-broken': { players: {}, lastUpdateSuccessful: false }
+            }
+        }
+    });
+
+    const candidates = BattlemetricsHandler.collectPlaytimeCandidates(client);
+
+    assert.deepStrictEqual(candidates.map(e => e.playerId), ['1']);
+});

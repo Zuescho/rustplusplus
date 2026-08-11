@@ -77,6 +77,18 @@ module.exports = {
         return module.exports.removeInvisibleCharacters(`${str ?? ''}`).trim();
     },
 
+    /* Playtime as it appears on a tracker card, where it shares a narrow column
+       with an emoji and a timer. Thousands are abbreviated because a five
+       figure Rust veteran is common and "12.4k h" costs half of what the exact
+       number would; below 1000 the hour is exact, since the difference between
+       40 h and 400 h is the whole point of showing it. Returns null for
+       anything that isn't a usable number, so callers can simply omit it. */
+    formatPlaytimeHours: function (hours) {
+        if (typeof hours !== 'number' || !Number.isFinite(hours) || hours < 0) return null;
+        if (hours < 1000) return `${Math.round(hours)} h`;
+        return `${(hours / 1000).toFixed(1)}k h`;
+    },
+
     /* Map with a fixed number of workers, preserving input order. Used where a
        list command would otherwise choose between an N-wide burst that gets the
        host 403'd by Steam and a serial loop that can outlive the interaction. */

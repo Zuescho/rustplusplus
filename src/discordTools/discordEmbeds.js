@@ -26,6 +26,7 @@ const DiscordTools = require('./discordTools.js');
 const InstanceUtils = require('../util/instanceUtils.js');
 const Timer = require('../util/timer');
 const ActivityDb = require('../util/activityDb.js');
+const Utils = require('../util/utils.js');
 
 function isValidUrl(url) {
     if (url.startsWith('https') || url.startsWith('http')) return true;
@@ -231,7 +232,7 @@ module.exports = {
 
             let status = '';
             if (!successful || !bmInstance.players.hasOwnProperty(player.playerId)) {
-                status += `${Constants.NOT_FOUND_EMOJI}\n`;
+                status += `${Constants.NOT_FOUND_EMOJI}`;
             }
             else {
                 let time = null;
@@ -247,8 +248,17 @@ module.exports = {
                 /* Per-player active-hours hint moved to the Report button —
                    the inline tracker UI now only shows the group-level
                    typical-play window so the list stays scannable. */
-                status += '\n';
             }
+
+            /* Lifetime Rust hours ride the status column rather than the name:
+               the name column is capped at 20 characters, and spending eight of
+               them on a number would truncate the thing the row is actually
+               identified by. Appended outside the branch on purpose — a cached
+               figure is still worth showing for a player the current roster has
+               never seen. */
+            const rustHours = Utils.formatPlaytimeHours(player.rustHours);
+            if (rustHours !== null) status += ` · ${rustHours}`;
+            status += '\n';
 
             if (totalCharacters + (nameLine.length + status.length) >= Constants.EMBED_MAX_TOTAL_CHARACTERS) {
                 break;
