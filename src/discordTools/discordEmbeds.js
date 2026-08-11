@@ -662,14 +662,14 @@ module.exports = {
         });
     },
 
-    getTeamLoginEmbed: function (guildId, body, png) {
+    getTeamLoginEmbed: function (guildId, body) {
         return module.exports.getEmbed({
             color: Constants.COLOR_ACTIVE,
             timestamp: true,
             footer: { text: body.name },
             author: {
                 name: Client.client.intlGet(guildId, 'userJustConnected', { name: body.targetName }),
-                iconURL: (png !== null) ? png : Constants.DEFAULT_SERVER_IMG,
+                iconURL: Constants.DEFAULT_SERVER_IMG,
                 url: `${Constants.STEAM_PROFILES_URL}${body.targetId}`
             }
         });
@@ -776,7 +776,7 @@ module.exports = {
         });
     },
 
-    getActivityNotificationEmbed: function (guildId, serverId, color, text, steamId, png, title = null) {
+    getActivityNotificationEmbed: function (guildId, serverId, color, text, steamId, title = null) {
         const instance = Client.client.getInstance(guildId);
         const footerTitle = title !== null ? title : instance.serverList[serverId].title;
         return module.exports.getEmbed({
@@ -785,7 +785,7 @@ module.exports = {
             footer: { text: footerTitle },
             author: {
                 name: text,
-                iconURL: (png !== null) ? png : Constants.DEFAULT_SERVER_IMG,
+                iconURL: Constants.DEFAULT_SERVER_IMG,
                 url: `${Constants.STEAM_PROFILES_URL}${steamId}`
             }
         });

@@ -46,10 +46,6 @@ const STEAMID64_REGEX = new RegExp(`^\\d{${Constants.STEAMID64_LENGTH}}$`);
    miss. */
 const PERSONA_NAME_REGEX = /class="actual_persona_name">(.+?)<\/span>/m;
 
-/* Non-greedy so we stop at the first `_full.jpg` (the avatar, which Steam
-   also emits early in og:image) instead of letting `.*` run to the last one on
-   the page and capture a corrupted span. */
-const AVATAR_REGEX = /<img src="(.*?_full.jpg)(.*?(?="))/;
 
 /**
  *  Turn a failed scrape into a reason a human can act on. The distinction
@@ -122,7 +118,6 @@ function createTtlCache(successTtlFn) {
     };
 }
 
-const _avatarCache = createTtlCache(() => Config.battlemetrics.steamAvatarCacheMs);
 const _nameCache = createTtlCache(() => Config.battlemetrics.steamNameCacheMs);
 
 /**
@@ -159,30 +154,11 @@ module.exports = {
     isValidSteamId: isValidSteamId,
 
     /**
-     *  Drop every cached avatar. Only needed so tests can start from a known
-     *  state — nothing in the running bot has a reason to call it.
-     */
-    clearAvatarCache: function () {
-        _avatarCache.clear();
-    },
-
-    /**
-     *  Drop every cached persona name. Tests only, same as above.
+     *  Drop every cached persona name. Only needed so tests can start from a
+     *  known state — nothing in the running bot has a reason to call it.
      */
     clearNameCache: function () {
         _nameCache.clear();
-    },
-
-    /**
-     *  Read the avatar cache without ever reaching Steam. Notification paths
-     *  use this so a death or a login costs nothing; the cache is filled by the
-     *  team-avatar priming step instead.
-     *  @param {*} steamId The player's SteamID64.
-     *  @return {string|null|undefined} The URL, null for a cached failure, or
-     *      undefined when nothing is cached.
-     */
-    getCachedSteamProfilePicture: function (steamId) {
-        return _avatarCache.get(`${steamId}`.trim());
     },
 
     /**
@@ -196,50 +172,6 @@ module.exports = {
      */
     getCachedSteamProfileName: function (steamId) {
         return _nameCache.get(`${steamId}`.trim());
-    },
-
-    scrapeSteamProfilePicture: async function (client, steamId) {
-        const id = `${steamId}`.trim();
-        const link = `${Constants.STEAM_PROFILES_URL}${id}`;
-
-        if (!isValidSteamId(id)) {
-            client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'scrapeInvalidSteamId', {
-                steamId: id === '' ? '(empty)' : id
-            }), 'error');
-            return null;
-        }
-
-        /* A cached failure is returned without logging again — the first one
-           already said why, and repeating it once per death buries the log. */
-        const cached = _avatarCache.get(id);
-        if (cached !== undefined) return cached;
-
-        const response = await module.exports.scrape(link);
-
-        if (!response || response.status !== 200) {
-            client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'failedToScrapeProfilePicture', {
-                reason: describeFailure(response),
-                link: link
-            }), 'error');
-            _avatarCache.set(id, null);
-            return null;
-        }
-
-        const png = AVATAR_REGEX.exec(response.data);
-        if (png) {
-            _avatarCache.set(id, png[1]);
-            return png[1];
-        }
-
-        /* The page loaded but did not parse. Silence here used to make a Steam
-           markup change indistinguishable from a profile that genuinely has no
-           avatar, so say so — this is the line that tells you the scraper, not
-           the network, is what broke. */
-        client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'scrapeProfilePictureNotFound', {
-            link: link
-        }), 'error');
-        _avatarCache.set(id, null);
-        return null;
     },
 
     scrapeSteamIdFromVanity: async function (client, vanity) {

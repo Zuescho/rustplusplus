@@ -31,7 +31,6 @@ const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const InstanceUtils = require('../util/instanceUtils.js');
 const Map = require('../util/map.js');
-const Scrape = require('../util/scrape.js');
 
 module.exports = async (client, guild) => {
     const credentials = InstanceUtils.readCredentialsFile(guild.id);
@@ -541,14 +540,13 @@ async function alarmRaidAlarm(client, guild, title, message, body) {
 }
 
 async function playerDeath(client, guild, title, message, body, discordUserId) {
-    /* Nothing to send this to means nothing to scrape for — this used to fetch
-       the avatar first and then throw the whole embed away. */
     const user = await DiscordTools.getUserById(guild.id, discordUserId);
     if (!user) return;
 
-    let png = null;
-    if (body.targetId) png = await Scrape.scrapeSteamProfilePicture(client, body.targetId);
-    if (png === null) png = isValidUrl(body.img) ? body.img : Constants.DEFAULT_SERVER_IMG;
+    /* Rust+ supplies its own image with the death notification; the killer's
+       Steam avatar used to be preferred over it, at the cost of scraping a
+       profile page per death. */
+    const png = isValidUrl(body.img) ? body.img : Constants.DEFAULT_SERVER_IMG;
 
     const content = {
         embeds: [DiscordEmbeds.getPlayerDeathEmbed({ title: title }, body, png)]
@@ -565,14 +563,10 @@ async function teamLogin(client, guild, title, message, body) {
 
     /* The common case is that the bot is connected to this very server, in
        which case teamHandler already reported the login and this notification
-       is dropped — scraping before that check spent a Steam request on an embed
-       nobody would ever see. Also skipped without a targetId (mirrors
-       playerDeath), which can only produce a malformed request. */
+       is dropped. */
     if (!rustplus || (rustplus && (serverId !== rustplus.serverId))) {
-        const png = body.targetId ? await Scrape.scrapeSteamProfilePicture(client, body.targetId) : null;
-
         const content = {
-            embeds: [DiscordEmbeds.getTeamLoginEmbed(guild.id, body, png)]
+            embeds: [DiscordEmbeds.getTeamLoginEmbed(guild.id, body)]
         }
 
         await DiscordMessages.sendMessage(guild.id, content, null, instance.channelId.activity);
