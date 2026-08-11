@@ -4,7 +4,7 @@
     "description": "A NodeJS Discord Bot with a built-in Rust+ companion API client (vendored in src/rustplus) that utilizes the power of the Rust+ Companion App with additional Quality-of-Life features.",
     "main": "index.ts",
     "scripts": {
-        "start": "ts-node .",
+        "start": "node .",
         "test": "tsc --noEmit -p . && node --test src/**/*.test.js"
     },
     "repository": {
@@ -18,7 +18,7 @@
     },
     "homepage": "https://github.com/faithix/rustplusplus#readme",
     "engines": {
-        "node": ">=22.12.0"
+        "node": ">=22.18.0"
     },
     "dependencies": {
         "@discordjs/rest": "^2.5.1",
@@ -35,11 +35,11 @@
         "lodash": "^4.17.21",
         "protobufjs": "^8.7.1",
         "translate": "^3.1.0",
-        "ts-node": "^10.9.2",
         "winston": "^3.8.2",
         "ws": "^8.18.3"
     },
     "devDependencies": {
-        "typescript": "^5.9.3"
+        "@types/node": "^26.2.0",
+        "typescript": "^7.0.2"
     }
 }

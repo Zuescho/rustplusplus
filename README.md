@@ -111,10 +111,22 @@ The `jpeg-js` resolution and the `npm-force-resolutions` preinstall hook are gon
 version that was being pinned, so the override forced exactly what npm installs anyway. Installs no longer shell out
 to `npx` before resolving.
 
-**Not upgraded: `typescript` (held at 5.9).** TypeScript 7 is the native port and does not expose the legacy compiler
-API that `ts-node` — how the bot actually starts — depends on; under TS 7 `ts-node` dies with
-`TypeError: Cannot read properties of undefined (reading 'fileExists')` before the bot loads. Moving off `ts-node`
-first (the entry point is a 68-line file that is already plain CommonJS) would unblock it.
+**`typescript` upgraded to 7, and `ts-node` removed.** TypeScript 7 is the native port and exposes no JavaScript
+compiler API — `require('typescript')` now yields only `{ version, versionMajorMinor }`, so `ts-node` died with
+`TypeError: Cannot read properties of undefined (reading 'fileExists')` before the bot loaded. Rather than rename
+the entry point (34 references to `index.ts` across 23 files reach it by name), the bot now starts with plain
+`node .`: Node strips the types itself, and `index.ts` has always been valid CommonJS with no TypeScript syntax in
+it. `ts-node` is gone entirely and `typescript` is a devDependency used only by `npm test`.
+
+Two consequences worth knowing. `engines.node` is now `>=22.18.0`, the release where Node documents type stripping
+as enabled by default — it works on some earlier 22.x, but only from 22.18 is it guaranteed. And because startup
+now depends on the entry point being *erasable*, `tsconfig.json` sets `erasableSyntaxOnly`: an `enum`, a namespace
+with a runtime body or a parameter property in `index.ts` would fail at startup rather than at build time, and this
+makes `npm test` reject them instead.
+
+Note that `npm test`'s type-check step is close to a no-op: `checkJs` is `false` and `index.ts` is the only `.ts`
+file, so `tsc` checks one 67-line unannotated file and merely parses the other ~120. That was equally true under
+5.9 — the upgrade just makes it visible.
 
 ### ⚠ Rust+ event map marker removal
 
