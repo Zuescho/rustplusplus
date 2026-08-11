@@ -21,7 +21,8 @@ For setup, pairing and credential instructions see the <a href="https://github.c
 ### (◉‿◉) Smarter tracker
 
 - **`/tracker add|remove|list`** slash command with **native Discord autocomplete** on both the tracker and player options. Player search merges the bot's online cache with a Battlemetrics server-scoped lookup, raced against Discord's 3-second budget.
-- **Active-hours hint** next to each tracked player (e.g. `~18–23 daily`), computed from a local SQLite log of polling snapshots aggregated over 30 days.
+- **Lifetime Rust hours** next to each tracked player (e.g. `🟢 [02:14] · 1.4k h`), summed from Battlemetrics' per-server playtime. This is time on servers Battlemetrics tracks, so it is a floor rather than the figure in the Steam library. Refreshed about once a day per player, one lookup per poll cycle — see `RPP_TRACKER_HOURS_REFRESH_MS`.
+- **Active-hours hint** per player (e.g. `~18–23 daily`), computed from a local SQLite log of polling snapshots aggregated over 30 days. Shown behind the `REPORT` button so the inline player list stays scannable.
 - **Group active-window line** in the tracker embed showing roughly when the whole group plays.
 - **Off-hours RAID ALERT** (per-tracker opt-in): when ≥60 % of the tracker is online during a quiet hour, fires `@everyone` in Discord and a force-message in team chat, with a 30 min cooldown.
 - Player rows now show **plain name + small B / S markdown links** to Battlemetrics and Steam profiles.
@@ -77,6 +78,17 @@ the log. Toggleable in the `settings` channel, defaults to on. Bot-wide log line
 a single Discord server — in a multi-guild deployment they would leak one guild's activity into another guild's private
 channel; they always remain in `logs/discordBot.log`.
 
+A pass over the codebase also gave a voice to the failures that used to happen in complete silence. The ones worth
+knowing about: the activity database refusing to open (which silently disables the active-hours hints, the tracker
+activity report **and** the off-hours raid alarm for the whole run); an in-game message that was queued and then
+dropped, which previously still logged as sent; a leadership transfer that did not take; a Battlemetrics player search
+or playtime lookup that keeps coming back empty; a server name that matches no Battlemetrics server exactly; channel
+permissions that could not be applied; and an active server that is selected but missing from the server list, which
+stops the bot connecting at all.
+
+Every one of these is either once per process, once per outage, or tied to something you did — none of them fire on the
+10 s or 60 s poll, so a healthy bot is exactly as quiet as it was before.
+
 ### (ﾉ◕ヮ◕)ﾉ Built-in Rust+ API client
 
 The bot no longer depends on a git-pinned fork of [rustplus.js](https://github.com/liamcottle/rustplus.js). The library
@@ -104,8 +116,8 @@ major:
 | `translate` | 1 | 3 | ESM-only, default export. |
 
 The three ESM-only packages are loaded with a plain `require()` — Node 22.12+ can require an ESM graph that has no
-top-level await, which all three are. **This is why the minimum Node version is now 22.12** (`engines` was previously
-`>=22.0.0`, though the docs already asked for 22.12).
+top-level await, which all three are. That raised the floor from `>=22.0.0` to 22.12; the TypeScript 7 change below
+raised it again, to **22.18**, which is the version that actually applies now.
 
 The `jpeg-js` resolution and the `npm-force-resolutions` preinstall hook are gone: jimp 1.x already depends on the
 version that was being pinned, so the override forced exactly what npm installs anyway. Installs no longer shell out
@@ -152,7 +164,7 @@ away with them.
 
 - Smart switch on/off announcements bypass the in-game mute (same fix as Smart Alarms in v1.25.5).
 - Battlemetrics request queue + 0–30 s poll-cycle jitter — no more burst rate-limit hits with many servers.
-- Steam profile name scraping throttled to once per 24 h per player.
+- Steam profile name scraping throttled to once per 6 h per player (`RPP_STEAM_NAME_CACHE_MS`).
 - Day/night transition broadcasts (`It's getting dark!` / `It's getting light!`).
 - Battlemetrics upcoming wipes display in server embed.
 - Alarm-triggered switch groups (auto-activate after N triggers).
@@ -167,6 +179,10 @@ Removed features the fork's target audience doesn't use:
 - CCTV codes command.
 - In-game `!tts` and Discord `sendTTSMessage`.
 - Battlemetrics "all online players" info-channel widget.
+- Steam profile-avatar scraping. It only ever supplied the small icon on activity-channel embeds and death DMs, at the
+  cost of a Steam profile fetch per death, login and logout — and it had been broken since Steam moved the avatar to a
+  `srcset` attribute, so most notifications were already showing the default image. Embeds now use the default icon and
+  still link to the Steam profile. This also removes `RPP_STEAM_AVATAR_CACHE_MS` and `RPP_STEAM_SCRAPE_DELAY_MS`.
 
 ---
 
