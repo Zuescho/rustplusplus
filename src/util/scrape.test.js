@@ -129,59 +129,6 @@ test('a page that loads but does not parse is reported as a markup change', asyn
     });
 });
 
-test('the avatar path reports failures and markup changes too', async () => {
-    await withScrape({ status: 429, headers: {} }, async () => {
-        Scrape.clearAvatarCache();
-        const client = makeClient();
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
-        assert.match(client.logs[0].text, /profile picture/);
-        assert.match(client.logs[0].text, /HTTP 429/);
-    });
-
-    await withScrape({ status: 200, data: '<html>no avatar</html>' }, async () => {
-        Scrape.clearAvatarCache();
-        const client = makeClient();
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
-        assert.match(client.logs[0].text, /found no avatar/);
-    });
-
-    const html = '<img src="https://avatars.example/abc_full.jpg" alt="x">';
-    await withScrape({ status: 200, data: html }, async () => {
-        Scrape.clearAvatarCache();
-        const client = makeClient();
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID),
-            'https://avatars.example/abc_full.jpg');
-    });
-});
-
-/* One scrape per death/login event is what gets the host 429'd in the first
-   place, so the second lookup of the same player must not reach Steam. */
-test('a scraped avatar is served from cache on the next lookup', async () => {
-    const html = '<img src="https://avatars.example/abc_full.jpg" alt="x">';
-    await withScrape({ status: 200, data: html }, async (calls) => {
-        Scrape.clearAvatarCache();
-        const client = makeClient();
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID),
-            'https://avatars.example/abc_full.jpg');
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID),
-            'https://avatars.example/abc_full.jpg');
-        assert.strictEqual(calls.length, 1, 'the second lookup should not hit Steam');
-    });
-});
-
-/* A throttled Steam answered on every death would both keep the traffic up and
-   repeat the same error line until it drowns the log. */
-test('a failed avatar lookup is not retried or re-logged immediately', async () => {
-    await withScrape({ status: 429, headers: {} }, async (calls) => {
-        Scrape.clearAvatarCache();
-        const client = makeClient();
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
-        assert.strictEqual(await Scrape.scrapeSteamProfilePicture(client, VALID_ID), null);
-        assert.strictEqual(calls.length, 1, 'the second lookup should not hit Steam');
-        assert.strictEqual(client.logs.length, 1, 'the failure should be logged once, not per event');
-    });
-});
-
 test('the vanity lookup reports why it failed', async () => {
     await withScrape({ status: 403 }, async () => {
         const client = makeClient();
@@ -274,23 +221,23 @@ test('a name cache TTL of zero stores nothing', async () => {
 });
 
 /* "Disabled" has to mean disabled for failures too. Caching those anyway left a
-   TTL of 0 still short-circuiting five minutes of lookups after one transient
-   error, which is not the per-event scraping the setting documents. */
+   TTL of 0 still short-circuiting hours of lookups after one transient error,
+   which is not the per-event scraping the setting documents. */
 test('a cache TTL of zero does not store failures either', async () => {
-    const original = Config.battlemetrics.steamAvatarCacheMs;
-    Config.battlemetrics.steamAvatarCacheMs = 0;
+    const original = Config.battlemetrics.steamNameCacheMs;
+    Config.battlemetrics.steamNameCacheMs = 0;
     try {
         await withScrape({ status: 429, headers: {} }, async (calls) => {
-            Scrape.clearAvatarCache();
+            Scrape.clearNameCache();
             const client = makeClient();
-            await Scrape.scrapeSteamProfilePicture(client, VALID_ID);
-            await Scrape.scrapeSteamProfilePicture(client, VALID_ID);
+            await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true });
+            await Scrape.scrapeSteamProfileName(client, VALID_ID, { cache: true });
             assert.strictEqual(calls.length, 2, 'a disabled cache must not suppress the second attempt');
-            assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), undefined);
+            assert.strictEqual(Scrape.getCachedSteamProfileName(VALID_ID), undefined);
         });
     }
     finally {
-        Config.battlemetrics.steamAvatarCacheMs = original;
+        Config.battlemetrics.steamNameCacheMs = original;
     }
 });
 
@@ -316,29 +263,6 @@ test('a refresh bypasses the name cache but still writes to it', async () => {
             'the refreshed name should have replaced the cached one');
         assert.strictEqual(calls.length, 2);
     });
-});
-
-/* Death and login notifications read this instead of scraping, so the three
-   states have to stay distinguishable: never fetched, fetched, known failure. */
-test('the cached avatar can be read back without touching the network', async () => {
-    Scrape.clearAvatarCache();
-    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), undefined);
-
-    const html = '<img src="https://avatars.example/abc_full.jpg" alt="x">';
-    await withScrape({ status: 200, data: html }, async () => {
-        await Scrape.scrapeSteamProfilePicture(makeClient(), VALID_ID);
-    });
-    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), 'https://avatars.example/abc_full.jpg');
-
-    Scrape.clearAvatarCache();
-    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), undefined);
-
-    await withScrape({ status: 403 }, async () => {
-        await Scrape.scrapeSteamProfilePicture(makeClient(), VALID_ID);
-    });
-    assert.strictEqual(Scrape.getCachedSteamProfilePicture(VALID_ID), null);
-
-    Scrape.clearAvatarCache();
 });
 
 test('isValidSteamId accepts a 17-digit string and nothing else', () => {

@@ -21,14 +21,12 @@
 const Discord = require('discord.js');
 const Path = require('path');
 
-const Config = require('../../config');
 const Constants = require('../util/constants.js');
 const Client = require('../../index.ts');
 const DiscordButtons = require('./discordButtons.js');
 const DiscordEmbeds = require('./discordEmbeds.js');
 const DiscordSelectMenus = require('./discordSelectMenus.js');
 const DiscordTools = require('./discordTools.js');
-const Scrape = require('../util/scrape.js');
 
 function buildMentionContent(guildId, everyone) {
     const instance = Client.client.getInstance(guildId);
@@ -381,34 +379,23 @@ module.exports = {
         if (!channelId) return;
 
         const content = {
-            embeds: [DiscordEmbeds.getActivityNotificationEmbed(guildId, serverId, color, text, null, null, title)]
+            embeds: [DiscordEmbeds.getActivityNotificationEmbed(guildId, serverId, color, text, null, title)]
         };
 
         await module.exports.sendMessage(guildId, content, null, channelId);
     },
 
     sendActivityNotificationMessage: async function (guildId, serverId, color, text, steamId, title = null,
-        everyone = false, options = {}) {
+        everyone = false) {
         const instance = Client.client.getInstance(guildId);
 
-        /* Teammates change their avatar about never, but they die, log in and
-           log out constantly — one scrape per event is what got the host
-           throttled by Steam in the first place. Notifications read the cache
-           the team-avatar priming step fills and accept a miss: the embed
-           already falls back to the default image when there is no URL. */
-        let png = null;
-        if (steamId !== null) {
-            const cacheDisabled = Config.battlemetrics.steamAvatarCacheMs === 0;
-            if (options.allowAvatarFetch === true || cacheDisabled) {
-                png = await Scrape.scrapeSteamProfilePicture(Client.client, steamId);
-            }
-            else {
-                const cached = Scrape.getCachedSteamProfilePicture(steamId);
-                png = cached === undefined ? null : cached;
-            }
-        }
+        /* The embed's icon is the default server image. It used to be the
+           player's Steam avatar, scraped from their profile page — a purely
+           decorative 16px picture that cost a Steam request per death, login
+           and logout, and was the traffic that got the host throttled. The
+           steamId is still passed through: it is what the embed links to. */
         const content = {
-            embeds: [DiscordEmbeds.getActivityNotificationEmbed(guildId, serverId, color, text, steamId, png, title)]
+            embeds: [DiscordEmbeds.getActivityNotificationEmbed(guildId, serverId, color, text, steamId, title)]
         }
 
         if (everyone) {

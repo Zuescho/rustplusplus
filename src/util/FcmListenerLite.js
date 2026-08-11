@@ -26,7 +26,6 @@ const DiscordMessages = require('../discordTools/discordMessages.js');
 const DiscordTools = require('../discordTools/discordTools.js');
 const InstanceUtils = require('../util/instanceUtils.js');
 const Map = require('../util/map.js');
-const Scrape = require('../util/scrape.js');
 
 module.exports = async (client, guild, steamId) => {
     const credentials = InstanceUtils.readCredentialsFile(guild.id);
@@ -379,9 +378,10 @@ async function playerDeath(client, guild, title, message, body, discordUserId) {
     const user = await DiscordTools.getUserById(guild.id, discordUserId);
     if (!user) return;
 
-    let png = null;
-    if (body.targetId !== '') png = await Scrape.scrapeSteamProfilePicture(client, body.targetId);
-    if (png === null) png = isValidUrl(body.img) ? body.img : Constants.DEFAULT_SERVER_IMG;
+    /* Rust+ supplies its own image with the death notification; the killer's
+       Steam avatar used to be preferred over it, at the cost of scraping a
+       profile page per death. */
+    const png = isValidUrl(body.img) ? body.img : Constants.DEFAULT_SERVER_IMG;
 
     const content = {
         embeds: [DiscordEmbeds.getPlayerDeathEmbed({ title: title }, body, png)]
