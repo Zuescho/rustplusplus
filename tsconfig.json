@@ -2,8 +2,18 @@
   "compilerOptions": {
     "target": "ESNext",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
     "module": "commonjs",                                /* Specify what module code is generated. */
-    "moduleResolution": "node",                          /* Specify how TypeScript looks up a file from a given module specifier. */
+    /* `moduleResolution` is deliberately absent. TypeScript 7 removed the
+       `node`/node10 value outright (TS5108), `node16`/`nodenext` are rejected
+       against `module: commonjs` (TS5110), and `bundler` was rejected by the
+       5.9 compiler this project came from — omitting the key is the only form
+       every version accepts. TS7 then defaults to `bundler` here. */
     "resolveJsonModule": true,                           /* Enable importing .json files. */
+    /* The bot boots by handing index.ts straight to node, which strips the
+       types rather than compiling them. Erasable syntax is therefore a runtime
+       requirement, not a style preference: an enum, a namespace with a runtime
+       body or a parameter property would fail at STARTUP, and a plain
+       --noEmit check would not have caught it. This makes CI reject them. */
+    "erasableSyntaxOnly": true,
     "allowJs": true,                                     /* Allow JavaScript files to be a part of your program. Use the 'checkJS' option to get errors from these files. */
     "checkJs": false,                                    /* Enable error reporting in type-checked JavaScript files. */
     "esModuleInterop": true,                             /* Emit additional JavaScript to ease support for importing CommonJS modules. This enables 'allowSyntheticDefaultImports' for type compatibility. */
