@@ -168,7 +168,17 @@ class DiscordBot extends Discord.Client {
                 await category.permissionOverwrites.set(perms);
             }
             catch (e) {
-                /* Ignore */
+                /* No reset pass follows on this branch — that is the `else`
+                   below — so a failure here leaves the category world-readable
+                   on a brand new instance with nothing said. Bounded to once
+                   per instance file: firstTime is cleared inside this same
+                   call. */
+                this.log(this.intlGet(null, 'errorCap'),
+                    this.intlGet(null, 'couldNotSetCategoryPermissions', {
+                        category: category.name,
+                        guild: `${guild.name} (${guild.id})`,
+                        error: `${e.code || ''} ${e.message}`.trim()
+                    }), 'error');
             }
         }
         else {
@@ -277,6 +287,20 @@ class DiscordBot extends Discord.Client {
                     instance.serverList[instance.activeServer].appPort,
                     instance.serverList[instance.activeServer].steamId,
                     instance.serverList[instance.activeServer].playerToken);
+            }
+            else if (instance.activeServer !== null) {
+                /* Reachable without hand-editing the instance file: deleting the
+                   active server only clears activeServer when a rustplus
+                   instance exists, and a disconnect drops the instance without
+                   clearing it. The guard is then false forever — no connection,
+                   no rustplusEvents instrumentation at all — while the bot still
+                   logs that it signed in and happily polls Battlemetrics. The
+                   `!== null` keeps the ordinary "nothing selected" state quiet. */
+                this.log(this.intlGet(null, 'warningCap'),
+                    this.intlGet(null, 'activeServerNotInServerList', {
+                        guild: guildId,
+                        server: instance.activeServer
+                    }));
             }
         });
     }

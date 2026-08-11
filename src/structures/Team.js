@@ -148,11 +148,30 @@ class Team {
         })
     }
 
+    /* Returns whether the promotion actually landed. assignLeader resolves with
+       the error object instead of rejecting, so discarding the result — as this
+       used to — meant a refused or timed-out promotion still produced a
+       "leader transferred" line to the user and the log. */
     async changeLeadership(steamId) {
-        let player = this.getPlayer(steamId);
-        if (player !== null) {
-            await player.assignLeader();
+        const player = this.getPlayer(steamId);
+        if (player === null) return false;
+
+        const response = await player.assignLeader();
+        const failed = response === undefined || response instanceof Error ||
+            (response !== null && typeof response === 'object' &&
+                Object.prototype.hasOwnProperty.call(response, 'error'));
+
+        if (failed) {
+            this.rustplus.log(Client.client.intlGet(null, 'errorCap'),
+                Client.client.intlGet(null, 'promoteToLeaderFailed', {
+                    name: player.name,
+                    steamId: player.steamId,
+                    error: (response && response.error) ? response.error : `${response}`
+                }), 'error');
+            return false;
         }
+
+        return true;
     }
 
     getNewPlayers(team) {

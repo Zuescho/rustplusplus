@@ -29,6 +29,10 @@ const BmToken = require('../util/battlemetricsToken.js');
    separates Rust hours from the rest. */
 const RUST_GAME_ID = 'rust';
 
+/* Server names we have already reported as unmatchable. Module-level on
+   purpose: a new instance is constructed for the same server every poll. */
+const _warnedUnresolvedServerNames = new Set();
+
 const SERVER_LOG_SIZE = 1000;
 const CONNECTION_LOG_SIZE = 1000;
 const PLAYER_CONNECTION_LOG_SIZE = 100;
@@ -569,6 +573,22 @@ class Battlemetrics {
             if (server.attributes.name === originalName) {
                 return server.id;
             }
+        }
+
+        /* The search itself worked, nothing matched the name exactly. Both
+           other exits above already log; this one used to return a bare null,
+           after which setup() gives up, updateBattlemetricsInstances skips its
+           whole block with no else, and the poll cycle `continue`s — every 60 s,
+           forever, without a word. Player counts and Battlemetrics tracking
+           stay off for that server and nothing says why.
+
+           The warn set is module-level rather than per instance because
+           DiscordBot constructs a fresh Battlemetrics(null, name) every cycle.
+           Its keyspace is bounded by the Rust+ server title. */
+        if (!_warnedUnresolvedServerNames.has(originalName)) {
+            _warnedUnresolvedServerNames.add(originalName);
+            Client.client.log(Client.client.intlGet(null, 'warningCap'),
+                Client.client.intlGet(null, 'battlemetricsServerNameUnresolved', { name: originalName }));
         }
 
         return null;

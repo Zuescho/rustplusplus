@@ -106,11 +106,16 @@ module.exports = {
 						}
 					}
 
-					if (rustplus.team.leaderSteamId === rustplus.playerId) {
-						await rustplus.team.changeLeadership(player.steamId);
-					}
-					else {
-						rustplus.leaderRustPlusInstance.promoteToLeaderAsync(player.steamId);
+					/* The promotion used to be fired and forgotten, so a refused
+					   or timed-out transfer still told the user it had worked.
+					   tryPromoteToLeader logs the specific reason. */
+					if (!(await rustplus.tryPromoteToLeader(player.steamId, player))) {
+						const failStr = client.intlGet(interaction.guildId, 'leaderTransferFailed', {
+							name: player.name
+						});
+						await client.interactionEditReply(interaction, DiscordEmbeds.getActionInfoEmbed(1, failStr,
+							instance.serverList[rustplus.serverId].title));
+						return;
 					}
 
 					const str = client.intlGet(interaction.guildId, 'leaderTransferred', {

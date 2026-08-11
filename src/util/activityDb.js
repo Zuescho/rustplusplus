@@ -18,6 +18,12 @@
 const Path = require('path');
 const Fs = require('fs');
 
+/* Same top-level form as instanceUtils.js / map.js. This module sits inside the
+   index.ts -> ready.js -> battlemetricsHandler.js -> activityDb.js cycle, which
+   is safe because index.ts mutates its exports rather than replacing them and
+   .client is only ever read at call time. */
+const Client = require('../../index.ts');
+
 let Database = null;
 let db = null;
 let _initFailed = false;
@@ -29,6 +35,24 @@ const DB_FILE = Path.join(__dirname, '..', '..', 'instances', 'activity.sqlite')
    bot was down in between), so transitions across such a gap aren't trusted. */
 const MAX_TRANSITION_GAP_SEC = 5 * 60;
 
+/* Both failures below are permanent for the process — `init` latches on
+   `_initFailed` — and every consumer then degrades quietly to []/0/false. The
+   result was a bot that looked completely healthy while the activity log took
+   no rows, the active-hours hints stayed blank and the off-hours raid alarm
+   could never fire, with nothing in the log to explain it. better-sqlite3 is a
+   hard dependency, so neither case is a supported configuration.
+
+   Wrapped because a disabled feature must not turn into a crash: init() can run
+   before the client finishes being built, and `Client.client` is undefined
+   until index.ts reaches its last line. */
+function _logDisabled(reason) {
+    try {
+        Client.client.log(Client.client.intlGet(null, 'errorCap'),
+            Client.client.intlGet(null, 'activityDbDisabled', { reason: reason }), 'error');
+    }
+    catch (e) { /* nothing to log with — the console still has the stack */ }
+}
+
 function init() {
     if (db || _initFailed) return db;
     try {
@@ -36,6 +60,9 @@ function init() {
     }
     catch (e) {
         _initFailed = true;
+        /* e.code separates a missing module from the far more likely
+           NODE_MODULE_VERSION mismatch after a Node upgrade. */
+        _logDisabled(`better-sqlite3 could not be loaded (${e.code || ''} ${e.message})`.replace(/\s+/g, ' '));
         return null;
     }
 
@@ -70,9 +97,12 @@ function init() {
     }
     catch (e) {
         /* Permission error, corrupt file, locked volume — disable the
-           feature rather than crash the whole bot. */
+           feature rather than crash the whole bot. The path is the whole point
+           of this message: the fix is almost always to chown the instances/
+           volume or delete a corrupt activity.sqlite. */
         _initFailed = true;
         db = null;
+        _logDisabled(`could not open or initialise ${DB_FILE} (${e.code || ''} ${e.message})`.replace(/\s+/g, ' '));
         return null;
     }
     return db;

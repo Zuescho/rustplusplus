@@ -735,3 +735,47 @@ test('collectPlaytimeCandidates skips paused trackers, failing servers and unlin
 
     assert.deepStrictEqual(candidates.map(e => e.playerId), ['1']);
 });
+
+/* A private profile answers 200-with-no-playtime, which is ordinary and must
+   never log. "Every request, forever, and not one success" is a broken endpoint
+   or a changed response shape, and used to be entirely invisible: a non-200 is
+   logged by Battlemetrics itself and a throw is logged by the pass, but this
+   path is neither. */
+test('runPlaytimePass reports a playtime endpoint that never once succeeds', async () => {
+    BattlemetricsHandler._resetPlaytimeHealth();
+
+    /* Enough distinct players to cross the threshold one cycle at a time. */
+    const players = Array.from({ length: 14 }, (_, i) =>
+        ({ name: `P${i}`, playerId: `${i}`, rustHours: null, rustHoursUpdatedAt: 0 }));
+    const client = makePlaytimeClient(players, { hours: {} });
+
+    for (let i = 0; i < 9; i++) await BattlemetricsHandler.runPlaytimePass(client);
+    assert.strictEqual(client.logs.length, 0, 'nine empty answers are still just private profiles');
+
+    await BattlemetricsHandler.runPlaytimePass(client);
+    assert.strictEqual(client.logs.length, 1, 'the tenth crosses the threshold');
+    assert.strictEqual(client.logs[0].level, 'warning');
+    assert.match(client.logs[0].text, /battlemetricsPlaytimeUnavailable/);
+
+    /* Once said, not repeated for the life of the process. */
+    for (let i = 0; i < 4; i++) await BattlemetricsHandler.runPlaytimePass(client);
+    assert.strictEqual(client.logs.length, 1, 'the warning must not repeat every cycle');
+
+    BattlemetricsHandler._resetPlaytimeHealth();
+});
+
+test('runPlaytimePass stays silent when playtime is merely sometimes empty', async () => {
+    BattlemetricsHandler._resetPlaytimeHealth();
+
+    const players = Array.from({ length: 14 }, (_, i) =>
+        ({ name: `P${i}`, playerId: `${i}`, rustHours: null, rustHoursUpdatedAt: 0 }));
+    /* One player in the middle has real hours — the rest are private. */
+    const client = makePlaytimeClient(players, { hours: { '5': 120 } });
+
+    for (let i = 0; i < 14; i++) await BattlemetricsHandler.runPlaytimePass(client);
+
+    assert.strictEqual(client.logs.length, 0,
+        'a single success proves the endpoint works; the rest are private profiles');
+
+    BattlemetricsHandler._resetPlaytimeHealth();
+});
