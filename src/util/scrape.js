@@ -75,11 +75,12 @@ function describeFailure(response) {
     return 'no HTTP response';
 }
 
-/* Scrape caches. The death and login handlers scrape one avatar per event, so a
-   busy team re-asks Steam for the same faces all wipe long and eventually gets
-   throttled — the errors then look like a broken scraper rather than self-
-   inflicted traffic. Failures are cached too, briefly: once Steam is refusing
-   us, retrying on every death only digs deeper. */
+/* Persona-name cache. Steam is only ever asked to turn an unresolved SteamID
+   into a name the Battlemetrics search can use, but the same id can be reached
+   from the tracker resolver and from the blacklist/whitelist listings, and a
+   host that asks repeatedly gets throttled — at which point the errors look
+   like a broken scraper rather than self-inflicted traffic. Failures are cached
+   too: once Steam is refusing us, retrying immediately only digs deeper. */
 const CACHE_MAX = 500;
 const CACHE_FAILURE_TTL_MS = 5 * 60 * 1000;
 
