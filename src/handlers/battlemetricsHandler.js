@@ -55,6 +55,13 @@ const STEAM_RESOLVE_INTERVAL_MS = Config.battlemetrics.steamResolveIntervalMs;
    we already know. */
 const RESOLVE_STEAM_REFRESH_AFTER = 3;
 
+/* Lifetime Rust hours. The number moves by at most a few hours a day, so it is
+   refreshed roughly daily and only a couple of players per cycle, which keeps
+   the added load at a fixed handful of requests per minute no matter how large
+   the tracked roster grows. */
+const HOURS_REFRESH_INTERVAL_MS = Config.battlemetrics.trackerHoursRefreshMs;
+const HOURS_MAX_PER_CYCLE = Config.battlemetrics.trackerHoursPerCycle;
+
 /* The UPDATE button's deep heal makes one rate-limited Battlemetrics request
    per placeholder, and a click can be repeated. Without these it is the only
    unbounded per-player request loop left on the tracker path: 40 placeholders
@@ -117,6 +124,19 @@ module.exports = {
         catch (e) {
             client.log(client.intlGet(null, 'errorCap'),
                 `Tracker resolution pass failed: ${e.message}`, 'error');
+        }
+
+        /* After the resolution pass, and non-fatally: lifetime hours are a
+           decoration on the card, so nothing about them may interrupt the
+           notifications the cycle exists to send. It runs before the tracker
+           cards are drawn below so a figure fetched this cycle is rendered this
+           cycle rather than a minute later. */
+        try {
+            await module.exports.runPlaytimePass(client);
+        }
+        catch (e) {
+            client.log(client.intlGet(null, 'errorCap'),
+                `Tracker playtime pass failed: ${e.message}`, 'error');
         }
 
         for (const guildItem of client.guilds.cache) {
@@ -682,7 +702,13 @@ module.exports = {
             playerId: playerId,
             steamNameLastScrapedAt: steamNameLastScrapedAt,
             resolveAttempts: 0,
-            resolveNextAttemptAt: 0
+            resolveNextAttemptAt: 0,
+            /* Lifetime Rust hours, filled in by runPlaytimePass. `null` means
+               "not known yet"; the timestamp records the last *attempt*, so a
+               profile that never answers is retried on the same slow schedule
+               as one that does instead of every cycle. */
+            rustHours: null,
+            rustHoursUpdatedAt: 0
         };
     },
 
@@ -877,6 +903,129 @@ module.exports = {
         });
 
         return candidates;
+    },
+
+    /**
+     * Every tracked player whose lifetime Rust hours are missing or stale,
+     * deduped by Battlemetrics id.
+     *
+     * The dedupe is the point: the figure is a property of the human, not of
+     * the tracker they appear on, so one request answers for every row that
+     * shares the id — across trackers and across guilds. Without it a clan
+     * tracked in two guilds would pay twice for the same number.
+     *
+     * Sorted oldest-first so a newly added player, whose timestamp is 0, is
+     * always served before a refresh of someone already showing a figure.
+     *
+     * @returns {Array<{playerId: string, bmInstance: object, updatedAt: number,
+     *      rows: Array<{guildId: string, instance: object, player: object}>}>}
+     */
+    collectPlaytimeCandidates: function (client) {
+        const now = Date.now();
+        const byPlayerId = new Map();
+
+        for (const guildItem of client.guilds.cache) {
+            const guildId = guildItem[0];
+            const instance = client.getInstance(guildId);
+            if (!instance || !instance.trackers) continue;
+
+            for (const tracker of Object.values(instance.trackers)) {
+                if (!_isTrackerActive(tracker)) continue;
+                if (tracker.battlemetricsId === null) continue;
+
+                /* The playtime endpoint is per player, not per server, so any
+                   working instance can carry the request — but a server whose
+                   own poll is failing is a bad bet for an extra call. */
+                const bmInstance = client.battlemetricsInstances[tracker.battlemetricsId];
+                if (!bmInstance || !bmInstance.lastUpdateSuccessful) continue;
+
+                for (const player of tracker.players) {
+                    if (!player.playerId) continue;
+
+                    const key = `${player.playerId}`;
+                    const existing = byPlayerId.get(key);
+                    if (existing) {
+                        existing.rows.push({ guildId, instance, player });
+                        /* The staleness of the group is the staleness of its
+                           least recently updated row: a row added later has
+                           nothing stored and must not be left waiting behind a
+                           copy that was filled in yesterday. */
+                        existing.updatedAt = Math.min(existing.updatedAt, player.rustHoursUpdatedAt || 0);
+                        continue;
+                    }
+
+                    byPlayerId.set(key, {
+                        playerId: key,
+                        bmInstance: bmInstance,
+                        updatedAt: player.rustHoursUpdatedAt || 0,
+                        rows: [{ guildId, instance, player }]
+                    });
+                }
+            }
+        }
+
+        const candidates = [];
+        for (const candidate of byPlayerId.values()) {
+            if ((now - candidate.updatedAt) < HOURS_REFRESH_INTERVAL_MS) continue;
+            candidates.push(candidate);
+        }
+
+        candidates.sort((a, b) => a.updatedAt - b.updatedAt);
+
+        return candidates;
+    },
+
+    /**
+     * Fill in lifetime Rust hours for the stalest few tracked players.
+     *
+     * One Battlemetrics request per player, HOURS_MAX_PER_CYCLE of them per
+     * cycle, so this adds a constant trickle to the shared request queue rather
+     * than scaling with the roster: 40 tracked players simply take 40 cycles to
+     * populate the first time, and after that each is refreshed about once a
+     * day.
+     *
+     * A profile that answers with nothing — private, or a key whose plan does
+     * not cover the endpoint — has its timestamp stamped anyway. That is what
+     * stops the same dead id from consuming the cycle's whole budget forever,
+     * at the cost of one wasted request per player per refresh interval.
+     */
+    runPlaytimePass: async function (client) {
+        if (HOURS_REFRESH_INTERVAL_MS === 0 || HOURS_MAX_PER_CYCLE === 0) return;
+
+        const candidates = module.exports.collectPlaytimeCandidates(client);
+        if (candidates.length === 0) return;
+
+        const dirtyGuilds = new Map();
+        let budget = HOURS_MAX_PER_CYCLE;
+
+        for (const candidate of candidates) {
+            if (budget <= 0) break;
+            budget -= 1;
+
+            let hours = null;
+            try {
+                hours = await candidate.bmInstance.getRustLifetimeHours(candidate.playerId);
+            }
+            catch (e) {
+                /* Treated exactly like an empty answer: stamp the attempt and
+                   move on, so a persistent failure costs one request per
+                   interval instead of one per cycle. */
+                client.log(client.intlGet(null, 'warningCap'),
+                    `Could not read Rust playtime for Battlemetrics player ${candidate.playerId}: ${e.message}`);
+            }
+
+            const stampedAt = Date.now();
+            for (const row of candidate.rows) {
+                /* Only overwrite a known figure with another known figure — a
+                   failed refresh should leave yesterday's number on the card
+                   rather than blanking it. */
+                if (hours !== null) row.player.rustHours = hours;
+                row.player.rustHoursUpdatedAt = stampedAt;
+                dirtyGuilds.set(row.guildId, row.instance);
+            }
+        }
+
+        for (const [guildId, instance] of dirtyGuilds) client.setInstance(guildId, instance);
     },
 
     /**

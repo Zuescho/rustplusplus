@@ -138,7 +138,8 @@ The Tracker embed shows:
 
 - **Title** — tracker name; **Battlemetrics Id**, **Server Id**, server status, streamer mode, optional clan tag in the description.
 - **Group active line** in the description — when enough samples have been collected, shows the group's typical play window (e.g. `Group active: ~18–23 daily`).
-- **Per-player rows** — plain player name with small `B` and `S` markdown links to Battlemetrics and Steam profiles, plus the current online/offline status, current session time, and the player's individual active-hours hint when available.
+- **Per-player rows** — plain player name with small `B` and `S` markdown links to Battlemetrics and Steam profiles, plus the current online/offline status, current session time, and the player's lifetime Rust hours when known (e.g. `🟢 [02:14] · 1.4k h`). The per-player active-hours hint lives behind the `REPORT` button so the list stays scannable.
+  - Lifetime hours are Battlemetrics' figure — time on servers Battlemetrics tracks — so they are a floor, not the number in the Steam library. They are refreshed about once a day per player (see `RPP_TRACKER_HOURS_REFRESH_MS`), and are simply omitted for a private profile or one Battlemetrics has no playtime for.
 
 ### Buttons
 
