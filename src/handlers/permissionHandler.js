@@ -90,10 +90,29 @@ module.exports = {
         return perms;
     },
 
+    /* Every permission change the operator can ask for — /role, /blacklist and
+       the settings reset — funnels through here. When it fails (the bot is
+       missing Manage Roles, or the configured role sits above the bot in the
+       hierarchy) the entire access model silently fails to apply while the
+       command still reports success. Failures are counted and reported as ONE
+       line rather than one per channel: a guild has ~15 of them and a
+       misconfiguration fails all of them for the same single reason. */
     resetPermissionsAllChannels: async function (client, guild) {
         const instance = client.getInstance(guild.id);
 
         if (instance.channelId.category === null) return;
+
+        let failCount = 0;
+        let firstName = null;
+        let firstError = null;
+
+        const noteFailure = (name, e) => {
+            failCount += 1;
+            if (firstName === null) {
+                firstName = name;
+                firstError = `${e.code || ''} ${e.message}`.trim();
+            }
+        };
 
         const category = await DiscordTools.getCategoryById(guild.id, instance.channelId.category);
         if (category) {
@@ -102,7 +121,7 @@ module.exports = {
                 await category.permissionOverwrites.set(perms);
             }
             catch (e) {
-                /* Ignore */
+                noteFailure(category.name, e);
             }
         }
 
@@ -116,9 +135,19 @@ module.exports = {
                     await channel.permissionOverwrites.set(perms);
                 }
                 catch (e) {
-                    /* Ignore */
+                    noteFailure(channel.name, e);
                 }
             }
+        }
+
+        if (failCount > 0) {
+            client.log(client.intlGet(null, 'errorCap'),
+                client.intlGet(null, 'couldNotSetChannelPermissions', {
+                    count: failCount,
+                    guildId: guild.id,
+                    channel: firstName,
+                    error: firstError
+                }), 'error');
         }
     },
 }

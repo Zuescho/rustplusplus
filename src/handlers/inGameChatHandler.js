@@ -40,8 +40,57 @@ module.exports = {
 
                 rustplus.updateBotMessages(messageFromQueue);
 
-                rustplus.sendTeamMessageAsync(messageFromQueue);
-                rustplus.log(client.intlGet(guildId, 'messageCap'), messageFromQueue);
+                /* sendTeamMessageAsync never rejects: it returns
+                   {error: 'tokensDidNotReplenish'} when the token bucket is
+                   empty, and its own .catch turns a timeout or an AppError into
+                   a resolved value. This is its only call site in the repo, so
+                   nothing else validates it — the result used to be discarded
+                   and the line below logged the message as sent regardless.
+                   Command replies, alarm notifications and raid alerts could
+                   vanish while the log positively asserted delivery.
+
+                   Deliberately not awaited: this runs on the chat queue timer,
+                   and awaiting would stall the next queued message for the full
+                   10 s request timeout. Deliberately not routed through
+                   rustplus.isResponseValid() either — its empty-response branch
+                   calls clearInterval(this.pollingTaskId), which would kill the
+                   poll loop over a failed chat line. */
+                rustplus.sendTeamMessageAsync(messageFromQueue).then((response) => {
+                    /* `hasOwnProperty`, not `!== undefined`. A successful reply
+                       is a decoded protobuf AppResponse, and `error` is an
+                       optional field — protobufjs puts `error: null` on the
+                       PROTOTYPE, so `response.error !== undefined` is true even
+                       when the send worked, which would report every delivered
+                       message as dropped. Same idiom as
+                       RustPlus.isResponseValid and Team.changeLeadership.
+
+                       This covers all four shapes: a success (no own `error`),
+                       a failure AppResponse and the bare AppError it rejects
+                       with (both own `error`), the {error: 'tokensDidNotReplenish'}
+                       literal, and a timeout, which arrives as an Error. */
+                    const failed = !response || response instanceof Error ||
+                        Object.prototype.hasOwnProperty.call(response, 'error');
+                    if (failed) {
+                        /* One line per outage, not one per queued message: a
+                           dead socket drains the whole queue at once. */
+                        if (!rustplus.inGameSendFailing) {
+                            rustplus.inGameSendFailing = true;
+                            rustplus.log(client.intlGet(null, 'errorCap'),
+                                client.intlGet(null, 'inGameMessageSendFailed', {
+                                    error: (response && response.error) ? response.error : `${response}`,
+                                    message: messageFromQueue
+                                }), 'error');
+                        }
+                        return;
+                    }
+
+                    if (rustplus.inGameSendFailing) {
+                        rustplus.inGameSendFailing = false;
+                        rustplus.log(client.intlGet(null, 'infoCap'),
+                            client.intlGet(null, 'inGameMessageSendRecovered'));
+                    }
+                    rustplus.log(client.intlGet(guildId, 'messageCap'), messageFromQueue);
+                });
             }
             else {
                 clearTimeout(rustplus.inGameChatTimeout);

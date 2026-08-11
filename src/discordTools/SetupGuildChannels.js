@@ -21,6 +21,11 @@
 const DiscordTools = require('../discordTools/discordTools.js');
 const PermissionHandler = require('../handlers/permissionHandler.js');
 
+/* Channels whose permission write has already been reported as failing, keyed
+   `guildId:channelId`. Setup touches ~15 channels per guild and a missing
+   Manage Roles fails every one of them for the same reason. */
+const _warnedChannelPerms = new Set();
+
 module.exports = async (client, guild, category) => {
     await addTextChannel(client.intlGet(guild.id, 'channelNameInformation'), 'information', client, guild, category);
     await addTextChannel(client.intlGet(guild.id, 'channelNameServers'), 'servers', client, guild, category);
@@ -84,9 +89,25 @@ async function addTextChannel(name, idName, client, guild, parent, permissionWri
 
     try {
         await channel.permissionOverwrites.set(perms);
+        _warnedChannelPerms.delete(`${guild.id}:${channel.id}`);
     }
     catch (e) {
-        /* Ignore */
+        /* Today this surfaces only as the context-free "Unhandled Rejection"
+           from the fire-and-forget lockPermissions() below, which names neither
+           the channel nor the Discord error code. Warn once per channel — this
+           runs for ~15 channels per guild at startup and a missing Manage Roles
+           fails all of them identically. Cleared on success above so a fixed
+           and then re-broken permission reports again. */
+        const key = `${guild.id}:${channel.id}`;
+        if (!_warnedChannelPerms.has(key)) {
+            _warnedChannelPerms.add(key);
+            client.log(client.intlGet(null, 'errorCap'),
+                client.intlGet(null, 'couldNotSetSingleChannelPermissions', {
+                    channel: name,
+                    channelId: channel.id,
+                    error: `${e.code || ''} ${e.message}`.trim()
+                }), 'error');
+        }
     }
 
     /* Currently, this halts the entire application... Too lazy to fix...

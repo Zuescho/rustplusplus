@@ -61,6 +61,9 @@ const RESOLVE_STEAM_REFRESH_AFTER = 3;
    the tracked roster grows. */
 const HOURS_REFRESH_INTERVAL_MS = Config.battlemetrics.trackerHoursRefreshMs;
 const HOURS_MAX_PER_CYCLE = Config.battlemetrics.trackerHoursPerCycle;
+/* Consecutive empty playtime answers, with none ever having succeeded, before
+   we call it a broken endpoint rather than a run of private profiles. */
+const PLAYTIME_EMPTY_WARN_THRESHOLD = 10;
 
 /* The UPDATE button's deep heal makes one rate-limited Battlemetrics request
    per placeholder, and a click can be repeated. Without these it is the only
@@ -78,6 +81,12 @@ const _warnedBadSteamIds = new Set();
 /* Same reasoning: a tracker holding the same human twice is a configuration
    problem the operator has to fix, not a line for every poll cycle. */
 const _warnedDuplicateLinks = new Set();
+/* Lifetime-hours health. A single empty answer is ordinary (private profile);
+   a long unbroken run of them without ever having succeeded means the endpoint
+   or its response shape changed, which is otherwise invisible. */
+let _playtimeEverSucceeded = false;
+let _playtimeConsecutiveEmpty = 0;
+let _warnedPlaytimeUnavailable = false;
 /* Battlemetrics ids the deep heal has already asked about and got nothing for.
    Without this every repeat click re-issues the whole set. */
 const _deepHealMisses = new Map();
@@ -834,6 +843,17 @@ module.exports = {
     },
 
     /**
+     * Forget what we know about playtime health. Same reasoning as above: the
+     * counters are process-wide, so a test that wants to exercise the warning
+     * threshold has to start from a known state.
+     */
+    _resetPlaytimeHealth: function () {
+        _playtimeEverSucceeded = false;
+        _playtimeConsecutiveEmpty = 0;
+        _warnedPlaytimeUnavailable = false;
+    },
+
+    /**
      * Every tracked player, across every guild, that has a SteamID but no
      * Battlemetrics id yet.
      *
@@ -1003,15 +1023,52 @@ module.exports = {
             budget -= 1;
 
             let hours = null;
+            let threw = false;
             try {
                 hours = await candidate.bmInstance.getRustLifetimeHours(candidate.playerId);
             }
             catch (e) {
+                threw = true;
                 /* Treated exactly like an empty answer: stamp the attempt and
                    move on, so a persistent failure costs one request per
                    interval instead of one per cycle. */
                 client.log(client.intlGet(null, 'warningCap'),
-                    `Could not read Rust playtime for Battlemetrics player ${candidate.playerId}: ${e.message}`);
+                    `Could not read Rust playtime for Battlemetrics player ${candidate.playerId}: ${e.message}`,
+                    'warning');
+            }
+
+            /* A 200 that carries no playtime is the normal answer for a private
+               profile, so it must not log per player. "Every request, forever,
+               and not one success" is a different thing entirely: it means the
+               response shape changed under us — the request asks for a sparse
+               fieldset (fields[server]=name) and the parser gates on the game
+               relationship and meta.timePlayed surviving it. That failure is
+               otherwise completely silent, because a non-200 is logged by
+               Battlemetrics#logRequestFailure and a throw is logged above,
+               while this path is neither: hours stays null, the timestamp is
+               stamped anyway, and every hours column stays blank forever. */
+            if (threw) {
+                /* A throw is already logged above, and counting it here would
+                   send the operator hunting a response-shape change while the
+                   real cause — an outage or a revoked token — sits two lines
+                   up in the same log. Only a genuine 200-with-no-playtime
+                   feeds the counter. */
+            }
+            else if (hours === null) {
+                _playtimeConsecutiveEmpty += 1;
+                if (!_playtimeEverSucceeded && !_warnedPlaytimeUnavailable &&
+                    _playtimeConsecutiveEmpty >= PLAYTIME_EMPTY_WARN_THRESHOLD) {
+                    _warnedPlaytimeUnavailable = true;
+                    client.log(client.intlGet(null, 'warningCap'),
+                        client.intlGet(null, 'battlemetricsPlaytimeUnavailable', {
+                            count: _playtimeConsecutiveEmpty
+                        }), 'warning');
+                }
+            }
+            else {
+                _playtimeEverSucceeded = true;
+                _playtimeConsecutiveEmpty = 0;
+                _warnedPlaytimeUnavailable = false;
             }
 
             const stampedAt = Date.now();

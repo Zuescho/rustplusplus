@@ -15,6 +15,8 @@
 */
 
 const BmRateLimiter = require('./battlemetricsRateLimiter.js');
+const BmToken = require('./battlemetricsToken.js');
+const Client = require('../../index.ts');
 const Utils = require('./utils.js');
 
 const CACHE_TTL_MS = 60_000;
@@ -32,6 +34,23 @@ const RESOLVE_PAGE_SIZE = 100;
 const CACHE_MAX = 500;
 
 const _cache = new Map();
+/* Server ids whose search is currently failing, keyed `serverId::reason`, so an
+   ongoing outage is reported once instead of on every poll and every keystroke.
+   Mirrors _warnedBadSteamIds / _warnedDuplicateLinks in battlemetricsHandler. */
+const _warnedSearchFailures = new Set();
+
+/* Both callers promise never to throw into the Discord autocomplete handler,
+   and one of these sites sits outside its try block — so logging must not be
+   able to break that promise. Client.client is undefined until index.ts reaches
+   its last line, and this module is inside that require cycle. Same guard as
+   activityDb._logDisabled. */
+function _log(key, args) {
+    try {
+        Client.client.log(Client.client.intlGet(null, 'warningCap'),
+            Client.client.intlGet(null, key, args));
+    }
+    catch (e) { /* nothing to log with */ }
+}
 
 function _now() { return Date.now(); }
 
@@ -74,6 +93,7 @@ async function _apiSearch(serverId, query, pageSize = MAX_RESULTS) {
         `&filter[servers]=${encodeURIComponent(serverId)}&page[size]=${pageSize}`;
     let results = [];
     let success = false;
+    let failReason = null;
     try {
         const response = await BmRateLimiter.scheduleGet(url, { timeout: 8000 });
         if (response && response.data && Array.isArray(response.data.data)) {
@@ -89,7 +109,37 @@ async function _apiSearch(serverId, query, pageSize = MAX_RESULTS) {
         /* On failure, fall back to whatever we had locally — never throw into
            the autocomplete handler. */
         results = [];
+        failReason = e.response ? `HTTP ${e.response.status}` : (e.code || e.message);
     }
+
+    /* Nothing else covers this path: the rate limiter rethrows without logging
+       and Battlemetrics.#logRequestFailure is never on it. The resolver turns
+       the failure into apiFailed, which deliberately does NOT count as an
+       attempt — so the row skips its backoff and retries every 60 s forever,
+       burning a lookup slot each cycle, and until now said nothing at all.
+
+       Emitted outside the catch on purpose: a 200 with an unexpected body also
+       leaves success false and reaches the same silent skip, so a catch-only
+       version would miss half the cases. */
+    if (!success) {
+        if (failReason === null) failReason = 'malformed response';
+        /* Keyed on server+reason and cleared on the next success, so this is a
+           state-change edge: one line when an outage starts, silence while it
+           lasts, re-armed once it recovers. It has to be — this runs from the
+           60 s poll AND once per autocomplete keystroke. The query itself is
+           never interpolated: it is arbitrary user input. */
+        const warnKey = `${serverId}::${failReason}`;
+        if (!_warnedSearchFailures.has(warnKey)) {
+            _warnedSearchFailures.add(warnKey);
+            _log('battlemetricsPlayerSearchFailed', { serverId: serverId, reason: failReason });
+        }
+    }
+    else if (_warnedSearchFailures.size > 0) {
+        for (const k of [..._warnedSearchFailures]) {
+            if (k.startsWith(`${serverId}::`)) _warnedSearchFailures.delete(k);
+        }
+    }
+
     /* Only cache successful responses (including a genuine "no matches"). A
        transient API error must not be cached, or it would suppress retries for
        the whole TTL even after the API recovers. */
@@ -185,7 +235,22 @@ async function resolveNameById(bmInstance, playerId) {
             response.data.data.attributes && response.data.data.attributes.name;
         if (name) return String(name);
     }
-    catch { /* swallow — caller will fall back to the ID */ }
+    catch (e) {
+        /* The caller falls back to the id either way, but "Battlemetrics has no
+           name for this player" and "the deep-heal burst just got us rate
+           limited" are not the same thing — and the caller then suppresses
+           retries for DEEP_HEAL_MISS_TTL_MS, so a second UPDATE click also
+           appears to do nothing. Nothing else logs this path.
+
+           With no token configured scheduleGet throws immediately; that is a
+           switched-off integration, not a failure worth reporting. */
+        if (BmToken.isEnabled()) {
+            _log('battlemetricsNameLookupFailed', {
+                playerId: playerId,
+                error: e.response ? `HTTP ${e.response.status}` : (e.code || e.message)
+            });
+        }
+    }
 
     return null;
 }

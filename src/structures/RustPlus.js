@@ -80,6 +80,9 @@ class RustPlus extends RustPlusLib {
         /* Chat handler variables */
         this.inGameChatQueue = [];
         this.inGameChatTimeout = null;
+        /* Latch for the in-game send failure edge, so a socket that drops with
+           a full queue reports once rather than once per queued message. */
+        this.inGameSendFailing = false;
 
         this.allConnections = [];
         this.playerConnections = new Object();
@@ -1458,6 +1461,56 @@ class RustPlus extends RustPlusLib {
         return strings;
     }
 
+    /**
+     *  Hand team leadership to a player, reporting whether it actually worked.
+     *
+     *  Two routes, both of which used to claim success unconditionally: when
+     *  the bot itself holds leadership it goes through the team, otherwise it
+     *  asks the leader's paired Rust+ Lite connection. Neither
+     *  promoteToLeaderAsync rejects — they resolve with the error object — so
+     *  the outcome has to be inspected rather than awaited-and-forgotten.
+     *
+     *  @param {string} steamId The player to promote.
+     *  @param {object} player The team player object, for the log line.
+     *  @return {boolean} True only if the promotion landed.
+     */
+    async tryPromoteToLeader(steamId, player) {
+        if (this.team.leaderSteamId === this.playerId) {
+            return await this.team.changeLeadership(steamId);
+        }
+
+        /* Nulled by rustplusEvents/disconnected.js during a reconnect, so the
+           old unguarded call could throw a TypeError into the command handler. */
+        const lite = this.leaderRustPlusInstance;
+        if (!lite) {
+            this.log(Client.client.intlGet(null, 'errorCap'),
+                Client.client.intlGet(null, 'promoteToLeaderFailed', {
+                    name: player ? player.name : steamId,
+                    steamId: steamId,
+                    error: Client.client.intlGet(null, 'promoteToLeaderNoConnection')
+                }), 'error');
+            return false;
+        }
+
+        const response = await lite.promoteToLeaderAsync(steamId);
+
+        /* RustPlusLite.isResponseValid is safe to use here and already logs the
+           specific reason (undefined / timeout / error / empty). Note this is
+           NOT RustPlus.isResponseValid, whose empty-response branch clears the
+           poll interval. */
+        if (!lite.isResponseValid(response)) {
+            this.log(Client.client.intlGet(null, 'errorCap'),
+                Client.client.intlGet(null, 'promoteToLeaderFailed', {
+                    name: player ? player.name : steamId,
+                    steamId: steamId,
+                    error: (response && response.error) ? response.error : `${response}`
+                }), 'error');
+            return false;
+        }
+
+        return true;
+    }
+
     async getCommandLeader(command, callerSteamId) {
         const prefix = this.generalSettings.prefix;
         const commandLeader = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxLeader')}`;
@@ -1492,14 +1545,19 @@ class RustPlus extends RustPlusLib {
                     }
                 }
 
-                if (this.team.leaderSteamId === this.playerId) {
-                    await this.team.changeLeadership(callerSteamId);
-                }
-                else {
-                    this.leaderRustPlusInstance.promoteToLeaderAsync(callerSteamId);
+                const player = this.team.getPlayer(callerSteamId);
+
+                /* Both branches used to report success unconditionally: the
+                   first discarded changeLeadership's outcome, the second did
+                   not even await the promotion. leaderRustPlusInstance is
+                   nulled on disconnect, so the else branch could also throw a
+                   TypeError straight into the command handler. */
+                if (!(await this.tryPromoteToLeader(callerSteamId, player))) {
+                    return Client.client.intlGet(this.guildId, 'leaderTransferFailed', {
+                        name: player.name
+                    });
                 }
 
-                const player = this.team.getPlayer(callerSteamId);
                 return Client.client.intlGet(this.guildId, 'leaderTransferred', {
                     name: player.name
                 });
@@ -1534,11 +1592,10 @@ class RustPlus extends RustPlusLib {
                             }
                         }
 
-                        if (this.team.leaderSteamId === this.playerId) {
-                            await this.team.changeLeadership(player.steamId);
-                        }
-                        else {
-                            this.leaderRustPlusInstance.promoteToLeaderAsync(player.steamId);
+                        if (!(await this.tryPromoteToLeader(player.steamId, player))) {
+                            return Client.client.intlGet(this.guildId, 'leaderTransferFailed', {
+                                name: player.name
+                            });
                         }
 
                         return Client.client.intlGet(this.guildId, 'leaderTransferred', {

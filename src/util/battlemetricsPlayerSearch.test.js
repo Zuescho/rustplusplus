@@ -1,5 +1,27 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const Path = require('path');
+
+/* The search module logs failures through the client, which it reaches via
+   `require('../../index.ts')` — and that boots the whole bot on import. Seed
+   the module cache with a stub, and keep the emitted lines so the warn-once
+   behaviour can be asserted. */
+const indexPath = Path.join(__dirname, '..', '..', 'index.ts');
+const logs = [];
+require.cache[indexPath] = {
+    id: indexPath,
+    filename: indexPath,
+    path: Path.dirname(indexPath),
+    loaded: true,
+    children: [],
+    paths: [],
+    exports: {
+        client: {
+            intlGet: (guildId, id, args = {}) => `${id}:${JSON.stringify(args)}`,
+            log: (title, text, level) => logs.push({ title, text, level })
+        }
+    }
+};
 
 const BmRateLimiter = require('./battlemetricsRateLimiter.js');
 const PlayerSearch = require('./battlemetricsPlayerSearch.js');
@@ -146,4 +168,50 @@ test('buildRosterIndex answers identically to walking the roster', () => {
     }
     assert.strictEqual(PlayerSearch.matchRosterName(bmInstance, 'Pablo', index), '1');
     assert.strictEqual(PlayerSearch.matchRosterName(bmInstance, 'Bob', index), null);
+});
+
+/* A search outage used to be completely silent: the rate limiter rethrows
+   without logging, and the resolver's apiFailed path deliberately skips the
+   backoff, so the row retried every 60 s forever with nothing in the log. */
+test('a search outage is reported once and re-armed after it recovers', async () => {
+    const serverId = freshServerId();
+    const failing = () => { const e = new Error('boom'); e.response = { status: 503 }; throw e; };
+
+    logs.length = 0;
+
+    await withApi(failing, async () => {
+        await PlayerSearch.resolveIdByName(null, serverId, 'Pablo');
+        await PlayerSearch.resolveIdByName(null, serverId, 'Ruben');
+        await PlayerSearch.resolveIdByName(null, serverId, 'Steve');
+    });
+
+    assert.strictEqual(logs.length, 1, 'an ongoing outage must not log per lookup');
+    assert.match(logs[0].text, /battlemetricsPlayerSearchFailed/);
+    assert.match(logs[0].text, /HTTP 503/);
+    assert.ok(!logs[0].text.includes('Pablo'), 'the typed query must never be interpolated');
+
+    /* Recovery clears the latch, so the next outage is reported again. */
+    await withApi(apiPlayers([{ id: '1', name: 'Pablo' }]), async () => {
+        await PlayerSearch.resolveIdByName(null, serverId, 'Pablo');
+    });
+    assert.strictEqual(logs.length, 1, 'a success is not itself worth a line');
+
+    await withApi(failing, async () => {
+        await PlayerSearch.resolveIdByName(null, serverId, 'Ruben');
+    });
+    assert.strictEqual(logs.length, 2, 'a fresh outage after a recovery must report again');
+});
+
+/* A 200 whose body is not the expected shape leaves success false and reaches
+   the same silent skip, so the emit cannot live inside the catch. */
+test('a malformed search response is reported too', async () => {
+    const serverId = freshServerId();
+    logs.length = 0;
+
+    await withApi({ data: { notWhatWeExpect: true } }, async () => {
+        await PlayerSearch.resolveIdByName(null, serverId, 'Pablo');
+    });
+
+    assert.strictEqual(logs.length, 1);
+    assert.match(logs[0].text, /malformed response/);
 });
