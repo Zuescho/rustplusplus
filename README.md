@@ -50,12 +50,49 @@ still counts for the team and their in-game commands still work.
 plus poll-cycle jitter; day/night transition broadcasts; upcoming wipes in the server embed;
 alarm-triggered switch groups; shorthand `!timer <time> [message]`.
 
+**Everything Rust+ itself offers** is here too: patrol helicopter, Chinook, oil rig heavy scientists and
+locked crates, the traveling vendor, Deep Sea detection and map wipes all notify in the `events`
+channel; Smart Switches, Smart Alarms, Switch Groups and Storage Monitors pair from the game and are
+controlled with Discord buttons or in-game commands; and the `information`, `servers`, `teamchat`,
+`activity` and `trackers` channels keep themselves up to date.
+
 **Slimmed down** — the RustLabs lookup commands (and their 21 MB of data), the vending-machine
 subscription system, CCTV codes, TTS and Steam avatar scraping are gone.
 
-The Rust+ client is built in ([`src/rustplus/`](src/rustplus)) rather than pulled from a git pin, every
+The Rust+ client lives in [`src/rustplus/`](src/rustplus) rather than being pulled from a git pin, every
 dependency is on its latest major, and the bot degrades cleanly when Facepunch removes the event map
 markers — see [INTERNALS.md](INTERNALS.md).
+
+---
+
+## Commands
+
+**Slash** — `/alarm` `/alias` `/battlemetrics` `/blacklist` `/credentials` `/help` `/ingameaccess`
+`/item` `/leader` `/map` `/mute` `/players` `/reset` `/role` `/storagemonitor` `/switch` `/tracker`
+`/uptime` `/whitelist`
+
+**In game** (default prefix `!`, configurable) — events: `cargo` (and `cargo timer`), `chinook`,
+`deepsea`, `events`, `heli`, `large`, `small`, `vendor`, `wipe`, `pop`, `time`. Team: `afk`, `alive`,
+`connection(s)`, `death(s)`, `leader`, `marker(s)`, `mute` / `unmute`, `note(s)`, `offline`, `online`,
+`player(s)`, `prox`, `send`, `steamid`, `team`, `timer(s)`, `uptime`. Translation: `tr`, `trf`.
+
+---
+
+## Setup
+
+1. Create a Discord application, add a bot to it, and give the container its token and client ID
+   (`RPP_DISCORD_TOKEN` / `RPP_DISCORD_CLIENT_ID`). The bot needs the **Server Members** and **Message
+   Content** privileged intents.
+2. Register your Rust+ credentials, which is what makes pairing, Smart Alarm notifications and offline
+   death notifications work. Run the
+   [credential application](https://github.com/alexemanuelol/rustplusplus-credential-application/releases),
+   press **Connect with Rust+**, log in with Steam, and paste the `/credentials add …` command it gives
+   you into any channel the bot can see. Each teammate can register their own.
+3. In game, press `ESC` → **Rust+** → **PAIR WITH SERVER**. The server appears in the `servers` channel;
+   click **CONNECT**.
+
+See **[CONFIGURATION.md](CONFIGURATION.md)** for environment variables, the `settings` channel toggles
+and the per-tracker options.
 
 ---
 
@@ -81,24 +118,6 @@ container's own entrypoint — no sidecar, no API key. Existing `instances/*.jso
 place: paired alarms, switches, trackers, settings and channel IDs all survive upgrades.
 
 Running from source needs Node **22.18+** and `npm install && npm start`.
-
----
-
-## Setup
-
-1. Create a Discord application, add a bot to it, and give the container its token and client ID
-   (`RPP_DISCORD_TOKEN` / `RPP_DISCORD_CLIENT_ID`). The bot needs the **Server Members** and **Message
-   Content** privileged intents.
-2. Register your Rust+ credentials, which is what makes pairing, Smart Alarm notifications and offline
-   death notifications work. Run the
-   [credential application](https://github.com/alexemanuelol/rustplusplus-credential-application/releases),
-   press **Connect with Rust+**, log in with Steam, and paste the `/credentials add …` command it gives
-   you into any channel the bot can see. Each teammate can register their own.
-3. In game, press `ESC` → **Rust+** → **PAIR WITH SERVER**. The server appears in the `servers` channel;
-   click **CONNECT**.
-
-Run `/help` in Discord for the command list, and see **[CONFIGURATION.md](CONFIGURATION.md)** for
-environment variables, the `settings` channel toggles and the per-tracker options.
 
 ---
 
