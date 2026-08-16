@@ -1,6 +1,6 @@
 # Feature Overview
 
-A high-level inventory of what this fork can do. For setup, see [documentation.md](documentation.md); for the exhaustive command reference see [commands.md](commands.md).
+A high-level inventory of what the bot can do. For setup, see [documentation.md](documentation.md); for the exhaustive command reference see [commands.md](commands.md).
 
 ## Discord Slash Commands
 
@@ -26,7 +26,7 @@ Server / event info: `cargo`, `chinook`, `deepsea`, `events`, `heli`, `large`, `
 Team utilities: `afk`, `alive`, `connection(s)`, `death(s)`, `leader`, `marker(s)`, `mute`, `note(s)`, `offline`, `online`, `player(s)`, `prox`, `send`, `steamid`, `team`, `timer(s)`, `unmute`, `uptime`.
 Translation: `tr`, `trf`.
 
-**`!cargo`** is enriched in this fork — see [commands.md](commands.md#cargo) for the `!cargo timer` subcommand and the rich summary output.
+See [commands.md](commands.md#cargo) for **`!cargo`**'s rich summary output and the `!cargo timer` subcommand.
 
 ## Smart Devices
 
@@ -79,16 +79,16 @@ See [discord_text_channels.md](discord_text_channels.md).
 
 - Smart switch on/off announcements bypass the in-game mute setting (same as Smart Alarms)
 - Battlemetrics request queue + 0–30s poll-cycle jitter to avoid API bursts
-- Steam profile name scraping throttled to once per 24 h per player
+- Steam profile name scraping throttled to once per 6 h per player
 - Day/night transition broadcasts (`It's getting dark!` / `It's getting light!`)
 - Battlemetrics upcoming wipes display in server embed
 - Alarm-triggered switch groups (auto-activate after N triggers)
 - Shorthand `!timer <time> [message]` (no `add` subcommand needed)
 - Asset-path monument tokens are no longer drawn over the map
 
-## What was removed in this fork
+## Removed features
 
-These features exist in the upstream but were dropped here to slim the codebase:
+These features exist in [alexemanuelol/rustplusplus](https://github.com/alexemanuelol/rustplusplus), which this codebase grew out of, but were dropped here to slim it down:
 
 - RustLabs lookup commands (`/craft`, `/decay`, `/despawn`, `/recycle`, `/research`, `/stack`, `/upkeep`) and their ~21 MB of static data — use [rustlabs.com](https://rustlabs.com) directly
 - Vending-machine item-subscription system (`/market`, `!market sub`, etc.) — new-vending-machine markers still announce

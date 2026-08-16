@@ -1,7 +1,7 @@
 {
     "name": "rustplusplus",
     "version": "1.27.5",
-    "description": "A NodeJS Discord Bot with a built-in Rust+ companion API client (vendored in src/rustplus) that utilizes the power of the Rust+ Companion App with additional Quality-of-Life features.",
+    "description": "A NodeJS Discord bot for Rust with a built-in Rust+ companion API client (src/rustplus): player trackers with activity analytics, full cargo ship lifecycle, smart device control and a translated team chat bridge.",
     "main": "index.ts",
     "scripts": {
         "start": "node .",
@@ -9,14 +9,14 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/faithix/rustplusplus.git"
+        "url": "https://github.com/Zuescho/rustplusplus.git"
     },
-    "author": "FaiThiX forked from Alexemanuelol",
+    "author": "Zuescho",
     "license": "SEE LICENSE IN LICENSE",
     "bugs": {
-        "url": "https://github.com/faithix/rustplusplus/issues"
+        "url": "https://github.com/Zuescho/rustplusplus/issues"
     },
-    "homepage": "https://github.com/faithix/rustplusplus#readme",
+    "homepage": "https://github.com/Zuescho/rustplusplus#readme",
     "engines": {
         "node": ">=22.18.0"
     },

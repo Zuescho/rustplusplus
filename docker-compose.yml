@@ -1,6 +1,6 @@
 services:
   rustplusbot:
-    image: ghcr.io/faithix/rustplusplus:master
+    image: ghcr.io/zuescho/rustplusplus:master
     container_name: rustplusbot
     environment:
       - RPP_DISCORD_TOKEN=TOKEN
