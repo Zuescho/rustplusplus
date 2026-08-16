@@ -1088,7 +1088,7 @@ module.exports = {
         const repository = 'https://github.com/Zuescho/rustplusplus';
         const credentials = `${repository}/blob/master/README.md#setup`;
         const pairServer = `${repository}/blob/master/README.md#setup`;
-        const commands = `${repository}/blob/master/README.md#features`;
+        const commands = `${repository}/blob/master/README.md#commands`;
 
         const description =
             `→ [${Client.client.intlGet(guildId, 'commandsHelpHowToCredentials')}](${credentials})\n` +
