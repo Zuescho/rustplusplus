@@ -13,10 +13,10 @@ Please note we have a code of conduct, please follow it in all your interactions
 
 ## Pull Request Process
 
-1. Fork the repository and create your branch from `main`.
+1. Fork the repository and create your branch from `master`.
 2. Implement the changes and test it !!!
 3. Test it again.
-4. If you've changed APIs, update the documentation (README.md or documentation.md).
+4. If you've changed APIs, update the documentation (README.md or the relevant file under `docs/`).
 5. Issue that pull request!
 
 ## Code Formatting
@@ -84,7 +84,7 @@ further defined and clarified by project maintainers.
 ### Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by contacting the project team in the [Discord Server](https://discord.gg/YtQMYYK2kM).
+reported by contacting the project maintainer through a [GitHub issue](https://github.com/Zuescho/rustplusplus/issues).
 All complaints will be reviewed and investigated and will result in a response that
 is deemed necessary and appropriate to the circumstances. The project team is
 obligated to maintain confidentiality with regard to the reporter of an incident.

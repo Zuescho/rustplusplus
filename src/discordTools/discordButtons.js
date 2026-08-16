@@ -562,19 +562,19 @@ module.exports = {
                 module.exports.getButton({
                     style: Discord.ButtonStyle.Link,
                     label: 'DEVELOPER',
-                    url: 'https://github.com/alexemanuelol'
+                    url: 'https://github.com/Zuescho'
                 }),
                 module.exports.getButton({
                     style: Discord.ButtonStyle.Link,
                     label: 'REPOSITORY',
-                    url: 'https://github.com/alexemanuelol/rustplusplus'
+                    url: 'https://github.com/Zuescho/rustplusplus'
                 })
             ),
             new Discord.ActionRowBuilder().addComponents(
                 module.exports.getButton({
                     style: Discord.ButtonStyle.Link,
                     label: 'DOCUMENTATION',
-                    url: 'https://github.com/alexemanuelol/rustplusplus/blob/master/docs/documentation.md'
+                    url: 'https://github.com/Zuescho/rustplusplus/blob/master/docs/documentation.md'
                 }),
                 module.exports.getButton({
                     style: Discord.ButtonStyle.Link,

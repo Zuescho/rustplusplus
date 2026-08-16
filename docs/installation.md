@@ -15,6 +15,6 @@ To enable step-trace for cargoship and patrol helicopter, [**GraphicsMagick**](h
 
 Open a terminal (`Git Bash` / `CMD` / `Terminal` / `PowerShell` or similar) and run the following commands:
 
-    $ git clone https://github.com/alexemanuelol/rustplusplus.git
+    $ git clone https://github.com/Zuescho/rustplusplus.git
     $ cd rustplusplus
     $ npm install

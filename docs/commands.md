@@ -106,7 +106,7 @@ Per-Steam-ID gate for the in-game command interface.
 
 ## /item
 
-Look up an item by name or ID. Returns a minimal item card (title + ID). For detailed item stats — recipes, decay, recycle output, etc. — use **[rustlabs.com](https://rustlabs.com)** directly; the RustLabs lookup commands were removed from this fork.
+Look up an item by name or ID. Returns a minimal item card (title + ID). For detailed item stats — recipes, decay, recycle output, etc. — use **[rustlabs.com](https://rustlabs.com)** directly; the RustLabs lookup commands were removed.
 
 | Option | Description |
 | --- | --- |
