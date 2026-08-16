@@ -51,12 +51,11 @@ plus poll-cycle jitter; day/night transition broadcasts; upcoming wipes in the s
 alarm-triggered switch groups; shorthand `!timer <time> [message]`.
 
 **Slimmed down** — the RustLabs lookup commands (and their 21 MB of data), the vending-machine
-subscription system, CCTV codes, TTS and Steam avatar scraping are gone. See
-[full_list_features.md](docs/full_list_features.md).
+subscription system, CCTV codes, TTS and Steam avatar scraping are gone.
 
 The Rust+ client is built in ([`src/rustplus/`](src/rustplus)) rather than pulled from a git pin, every
 dependency is on its latest major, and the bot degrades cleanly when Facepunch removes the event map
-markers — see [internals.md](docs/internals.md).
+markers — see [INTERNALS.md](INTERNALS.md).
 
 ---
 
@@ -85,17 +84,21 @@ Running from source needs Node **22.18+** and `npm install && npm start`.
 
 ---
 
-## Documentation
+## Setup
 
-| | |
-| --- | --- |
-| [Discord bot setup](docs/discord_bot_setup.md) | Create the application, invite the bot |
-| [Credentials](docs/credentials.md) · [(web version)](docs/credentials_web_version.md) | FCM credentials for pairing |
-| [Pair & connect a server](docs/pair_and_connect_to_server.md) | Getting the bot onto your server |
-| [Configuration](docs/configuration.md) | Environment variables, settings channel, per-tracker options |
-| [Commands](docs/commands.md) · [Feature overview](docs/full_list_features.md) | What the bot can do |
-| [Discord channels](docs/discord_text_channels.md) · [Smart devices](docs/smart_devices.md) | Channel-by-channel reference |
-| [Internals](docs/internals.md) | Vendored Rust+ client, dependencies, marker removal |
+1. Create a Discord application, add a bot to it, and give the container its token and client ID
+   (`RPP_DISCORD_TOKEN` / `RPP_DISCORD_CLIENT_ID`). The bot needs the **Server Members** and **Message
+   Content** privileged intents.
+2. Register your Rust+ credentials, which is what makes pairing, Smart Alarm notifications and offline
+   death notifications work. Run the
+   [credential application](https://github.com/alexemanuelol/rustplusplus-credential-application/releases),
+   press **Connect with Rust+**, log in with Steam, and paste the `/credentials add …` command it gives
+   you into any channel the bot can see. Each teammate can register their own.
+3. In game, press `ESC` → **Rust+** → **PAIR WITH SERVER**. The server appears in the `servers` channel;
+   click **CONNECT**.
+
+Run `/help` in Discord for the command list, and see **[CONFIGURATION.md](CONFIGURATION.md)** for
+environment variables, the `settings` channel toggles and the per-tracker options.
 
 ---
 

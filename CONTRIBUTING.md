@@ -16,7 +16,7 @@ Please note we have a code of conduct, please follow it in all your interactions
 1. Fork the repository and create your branch from `master`.
 2. Implement the changes and test it !!!
 3. Test it again.
-4. If you've changed APIs, update the documentation (README.md or the relevant file under `docs/`).
+4. If you've changed APIs, update the documentation (README.md, CONFIGURATION.md or INTERNALS.md).
 5. Issue that pull request!
 
 ## Code Formatting
