@@ -74,3 +74,10 @@ is selected but missing from the server list, which stops the bot connecting at 
 
 Every one of these is either once per process, once per outage, or tied to something you did — none of
 them fire on the 10 s or 60 s poll, so a healthy bot stays quiet.
+
+Paired smart devices that the server answers `not_found` for used to be the exception:
+the reachability sweep re-probed them every 5 minutes and logged the same AppError
+for the rest of the wipe. It now reports the transition into unreachable once (with
+the specific reason) and then probes silently. Reconnect setup does the same.
+Gone switches are also skipped by the auto day/night/proximity loops, so they do
+not spend a token — and another error line — every 10 s poll.

@@ -42,6 +42,22 @@ const Timer = require('../util/timer.js');
 const TOKENS_LIMIT = 24;        /* Per player */
 const TOKENS_REPLENISH = 3;     /* Per second */
 
+/* AppError arrives two ways: sendRequestAsync rejects with the inner
+   `{ error: 'not_found' }`, and a caller that passed the whole AppResponse
+   has `{ error: { error: 'not_found' } }`. Log the string in both cases
+   rather than `[object Object]`. */
+function responseErrorValue(response) {
+    if (response == null || typeof response !== 'object' ||
+        !Object.prototype.hasOwnProperty.call(response, 'error')) {
+        return undefined;
+    }
+    const err = response.error;
+    if (err && typeof err === 'object' && Object.prototype.hasOwnProperty.call(err, 'error')) {
+        return err.error;
+    }
+    return err;
+}
+
 class RustPlus extends RustPlusLib {
     constructor(guildId, serverIp, appPort, steamId, playerToken) {
         super(serverIp, appPort, steamId, playerToken);
@@ -627,26 +643,41 @@ class RustPlus extends RustPlusLib {
         }
     }
 
-    async isResponseValid(response) {
+    /* `log` suppresses the error line without changing the verdict. The
+       periodic entity reachability sweeps (smartSwitch/storageMonitor/
+       smartAlarm handlers) pass the entity's current `reachable` flag, so a
+       deployable that is already known gone — and stays gone after a wipe —
+       is probed silently, while the transition into unreachable is reported
+       once with its specific reason. Without this the same `not_found` was
+       logged every sweep (every 30 polls) forever. */
+    async isResponseValid(response, log = true) {
         if (response === undefined) {
-            this.log(Client.client.intlGet(null, 'errorCap'),
-                Client.client.intlGet(null, 'responseIsUndefined'), 'error');
+            if (log) {
+                this.log(Client.client.intlGet(null, 'errorCap'),
+                    Client.client.intlGet(null, 'responseIsUndefined'), 'error');
+            }
             return false;
         }
         else if (response.toString() === 'Error: Timeout reached while waiting for response') {
-            this.log(Client.client.intlGet(null, 'errorCap'),
-                Client.client.intlGet(null, 'responseTimeout'), 'error');
+            if (log) {
+                this.log(Client.client.intlGet(null, 'errorCap'),
+                    Client.client.intlGet(null, 'responseTimeout'), 'error');
+            }
             return false;
         }
-        else if (response.hasOwnProperty('error')) {
-            this.log(Client.client.intlGet(null, 'errorCap'), Client.client.intlGet(null, 'responseContainError', {
-                error: response.error
-            }), 'error');
+        else if (responseErrorValue(response) !== undefined) {
+            if (log) {
+                this.log(Client.client.intlGet(null, 'errorCap'), Client.client.intlGet(null, 'responseContainError', {
+                    error: responseErrorValue(response)
+                }), 'error');
+            }
             return false;
         }
         else if (Object.keys(response).length === 0) {
-            this.log(Client.client.intlGet(null, 'errorCap'),
-                Client.client.intlGet(null, 'responseIsEmpty'), 'error');
+            if (log) {
+                this.log(Client.client.intlGet(null, 'errorCap'),
+                    Client.client.intlGet(null, 'responseIsEmpty'), 'error');
+            }
             clearInterval(this.pollingTaskId);
             return false;
         }

@@ -45,7 +45,8 @@ const STEAMID64_REGEX = new RegExp(`^\\d{${Constants.STEAMID64_LENGTH}}$`);
    carries lastIndex between exec() calls, which would make every other lookup
    miss. */
 const PERSONA_NAME_REGEX = /class="actual_persona_name">(.+?)<\/span>/m;
-
+const STEAM_ID_XML_REGEX = /<steamID>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/steamID>/;
+const STEAM_XML_ERROR_REGEX = /<error>([\s\S]*?)<\/error>/;
 
 /**
  *  Turn a failed scrape into a reason a human can act on. The distinction
@@ -73,6 +74,37 @@ function describeFailure(response) {
     if (response && response.scrapeErrorMessage) return `${response.scrapeErrorMessage}, no HTTP response`;
 
     return 'no HTTP response';
+}
+
+/**
+ *  Pull a persona name out of a Steam profile payload. XML (`?xml=1`) is the
+ *  stable form — private profiles still include `<steamID>` — and the HTML
+ *  class is the fallback if Steam ever serves the page instead.
+ *  @param {*} data The response body.
+ *  @return {string|null}
+ */
+function extractPersonaName(data) {
+    if (typeof data !== 'string') return null;
+
+    const xml = STEAM_ID_XML_REGEX.exec(data);
+    if (xml) {
+        const name = Utils.decodeHtml(xml[1]).trim();
+        if (name) return name;
+    }
+
+    const html = PERSONA_NAME_REGEX.exec(data);
+    if (html) {
+        const name = Utils.decodeHtml(html[1]).trim();
+        if (name) return name;
+    }
+
+    return null;
+}
+
+function extractSteamXmlError(data) {
+    if (typeof data !== 'string') return null;
+    const match = STEAM_XML_ERROR_REGEX.exec(data);
+    return match ? Utils.decodeHtml(match[1]).trim() : null;
 }
 
 /* Persona-name cache. Steam is only ever asked to turn an unresolved SteamID
@@ -255,7 +287,10 @@ module.exports = {
             if (cached !== undefined) return cached;
         }
 
-        const response = await module.exports.scrape(link);
+        /* XML is the stable document: private profiles still include
+           `<steamID>`, and Steam's "profile could not be found" comes back as
+           200 + `<error>` rather than a 404. HTML is only the fallback. */
+        const response = await module.exports.scrape(`${link}?xml=1`);
 
         if (!response || response.status !== 200) {
             client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'failedToScrapeProfileName', {
@@ -266,16 +301,27 @@ module.exports = {
             return null;
         }
 
-        const data = PERSONA_NAME_REGEX.exec(response.data);
-        if (data) {
-            const name = Utils.decodeHtml(data[1]);
+        const name = extractPersonaName(response.data);
+        if (name) {
             if (useCache) _nameCache.set(id, name);
             return name;
         }
 
-        client.log(client.intlGet(null, 'errorCap'), client.intlGet(null, 'scrapeProfileNameNotFound', {
-            link: link
-        }), 'error');
+        const steamError = extractSteamXmlError(response.data);
+        if (steamError) {
+            client.log(client.intlGet(null, 'warningCap'), client.intlGet(null, 'scrapeProfileXmlNotFound', {
+                reason: steamError,
+                link: link
+            }));
+        }
+        else {
+            /* A 200 with neither a name nor Steam's own error is the markup-
+               change case. Warning, not error: it is not an operational
+               failure, and the resolver already caches the miss. */
+            client.log(client.intlGet(null, 'warningCap'), client.intlGet(null, 'scrapeProfileNameNotFound', {
+                link: link
+            }));
+        }
         if (useCache) _nameCache.set(id, null);
         return null;
     },

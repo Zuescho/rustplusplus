@@ -29,7 +29,7 @@ module.exports = async (client, rustplus) => {
         const entity = instance.serverList[serverId].alarms[entityId];
         const info = await rustplus.getEntityInfoAsync(entityId);
 
-        if (!(await rustplus.isResponseValid(info))) {
+        if (!(await rustplus.isResponseValid(info, entity.reachable))) {
             if (entity.reachable === true) {
                 await DiscordMessages.sendSmartAlarmNotFoundMessage(guildId, serverId, entityId);
             }

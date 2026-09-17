@@ -42,9 +42,13 @@ module.exports = {
         const changedSwitches = [];
         if (rustplus.smartSwitchIntervalCounter === 0) {
             for (const entityId in instance.serverList[serverId].switches) {
+                /* Probe silently once the switch is known gone; see
+                   RustPlus.isResponseValid. Only the transition into
+                   unreachable is reported. */
+                const reachable = instance.serverList[serverId].switches[entityId].reachable;
                 const info = await rustplus.getEntityInfoAsync(entityId);
-                if (!(await rustplus.isResponseValid(info))) {
-                    if (instance.serverList[serverId].switches[entityId].reachable) {
+                if (!(await rustplus.isResponseValid(info, reachable))) {
+                    if (reachable) {
                         await DiscordMessages.sendSmartSwitchNotFoundMessage(guildId, serverId, entityId);
                         instance.serverList[serverId].switches[entityId].reachable = false;
                         client.setInstance(guildId, instance);
@@ -72,6 +76,8 @@ module.exports = {
 
             if (timeRemainingSeconds !== null && timeRemainingSeconds <= 120) {
                 for (const [entityId, content] of Object.entries(instance.serverList[serverId].switches)) {
+                    if (!content.reachable) continue;
+
                     /* AUTO-DAY: turn ON 2 min before day */
                     if (rustplus.time.isNight() && content.autoDayNightOnOff === 1 && !content.active) {
                         instance.serverList[serverId].switches[entityId].active = true;
@@ -129,6 +135,8 @@ module.exports = {
 
         if (rustplus.time.isTurnedDay(time)) {
             for (const [entityId, content] of Object.entries(instance.serverList[serverId].switches)) {
+                if (!content.reachable) continue;
+
                 if (content.autoDayNightOnOff === 1) {
                     /* AUTO-DAY: ON at day - fallback if early activation didn't fire */
                     if (!content.active) {
@@ -194,6 +202,8 @@ module.exports = {
         }
         else if (rustplus.time.isTurnedNight(time)) {
             for (const [entityId, content] of Object.entries(instance.serverList[serverId].switches)) {
+                if (!content.reachable) continue;
+
                 if (content.autoDayNightOnOff === 1) {
                     /* AUTO-DAY: OFF at night - delay by 2 minutes */
                     if (rustplus.dayNightSwitchTimeouts[entityId]) {
@@ -259,6 +269,8 @@ module.exports = {
         }
 
         for (const [entityId, content] of Object.entries(instance.serverList[serverId].switches)) {
+            if (!content.reachable) continue;
+
             if (content.autoDayNightOnOff === 3) { /* AUTO-ON */
                 if (content.active) continue;
 
