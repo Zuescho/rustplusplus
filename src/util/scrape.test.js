@@ -112,6 +112,29 @@ test('a persona name is extracted and HTML-decoded', async () => {
     });
 });
 
+test('a persona name is extracted from Steam XML including CDATA', async () => {
+    const xml = '<?xml version="1.0"?><profile><steamID><![CDATA[Basti1911]]></steamID></profile>';
+    await withScrape({ status: 200, data: xml }, async (calls) => {
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID), 'Basti1911');
+        assert.strictEqual(client.logs.length, 0);
+        assert.ok(calls[0].includes('?xml=1'), `expected xml=1, got ${calls[0]}`);
+    });
+});
+
+test('an unknown profile XML error is a warning, not an error', async () => {
+    const xml = '<response><error>The specified profile could not be found.</error></response>';
+    await withScrape({ status: 200, data: xml }, async () => {
+        const client = makeClient();
+        assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID), null);
+        assert.strictEqual(client.logs.length, 1);
+        assert.strictEqual(client.logs[0].title, 'WARNING');
+        assert.notStrictEqual(client.logs[0].level, 'error');
+        assert.match(client.logs[0].text, /does not know that profile/);
+        assert.match(client.logs[0].text, /could not be found/);
+    });
+});
+
 test('back-to-back lookups both match (no leaked regex lastIndex)', async () => {
     const html = '<span class="actual_persona_name">Pablo</span>';
     await withScrape({ status: 200, data: html }, async () => {
@@ -121,10 +144,12 @@ test('back-to-back lookups both match (no leaked regex lastIndex)', async () => 
     });
 });
 
-test('a page that loads but does not parse is reported as a markup change', async () => {
+test('a page that loads but does not parse is a warning, not an error', async () => {
     await withScrape({ status: 200, data: '<html>no persona here</html>' }, async () => {
         const client = makeClient();
         assert.strictEqual(await Scrape.scrapeSteamProfileName(client, VALID_ID), null);
+        assert.strictEqual(client.logs[0].title, 'WARNING');
+        assert.notStrictEqual(client.logs[0].level, 'error');
         assert.match(client.logs[0].text, /found no persona name/);
     });
 });
