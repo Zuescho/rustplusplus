@@ -148,7 +148,9 @@ module.exports = {
             active = false;
         }
         else if (command === `${groupCommand} ${statusEn}` || command === `${groupCommand} ${statusLang}`) {
-            const switchStatus = switchGroups[groupId].switches.map(switchId => {
+            const switchStatus = switchGroups[groupId].switches
+                .filter(switchId => instance.serverList[serverId].switches.hasOwnProperty(switchId))
+                .map(switchId => {
                 const { active, name, reachable } = instance.serverList[serverId].switches[switchId];
                 return { active, name, reachable }
             });
@@ -158,7 +160,16 @@ module.exports = {
             return true;
         }
         else {
-            return true;
+            /* Only a bare command or a timer toggles; anything else (a typo
+               like "onn") is ignored rather than flipping the whole group. */
+            if (rest !== '' && Timer.getSecondsFromStringTime(rest) === null) return true;
+
+            /* Bare command toggles, like a single smart switch does: turn the
+               group off when every switch in it is on, otherwise turn it on. */
+            const groupSwitches = switchGroups[groupId].switches
+                .filter(switchId => instance.serverList[serverId].switches.hasOwnProperty(switchId));
+            active = !(groupSwitches.length !== 0 &&
+                groupSwitches.every(switchId => instance.serverList[serverId].switches[switchId].active));
         }
 
         if (rustplus.currentSwitchTimeouts.hasOwnProperty(groupId)) {

@@ -230,13 +230,30 @@ module.exports = {
                 ? `${displayName}  ${links.join(' ')}\n`
                 : `${displayName}\n`;
 
+            /* Battlemetrics sessions know when a player last disconnected even
+               if this bot never saw them leave — offline since before a
+               restart, or dropped from the roster. */
+            const sinceLastDisconnect = () => {
+                if (!ActivityDb.getSessionCoverage(player.playerId)) return null;
+                const { lastConnectedAt, lastDisconnectedAt } = ActivityDb.getLastTransitions(player.playerId);
+                if (!lastDisconnectedAt) return null;
+                /* A session still open means they are not offline. */
+                if (lastConnectedAt !== null && lastConnectedAt > lastDisconnectedAt) return null;
+                const minutes = Math.max(0, Math.floor((Date.now() / 1000 - lastDisconnectedAt) / 60));
+                return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+            };
+
             let status = '';
             if (!successful || !bmInstance.players.hasOwnProperty(player.playerId)) {
-                status += `${Constants.NOT_FOUND_EMOJI}`;
+                const offlineFor = successful ? sinceLastDisconnect() : null;
+                status += offlineFor !== null
+                    ? `${Constants.OFFLINE_EMOJI} [${offlineFor}]`
+                    : `${Constants.NOT_FOUND_EMOJI}`;
             }
             else {
+                const isOnline = bmInstance.players[player.playerId]['status'];
                 let time = null;
-                if (bmInstance.players[player.playerId]['status']) {
+                if (isOnline) {
                     time = bmInstance.getOnlineTime(player.playerId);
                     status += `${Constants.ONLINE_EMOJI}`;
                 }
@@ -244,7 +261,8 @@ module.exports = {
                     time = bmInstance.getOfflineTime(player.playerId);
                     status += `${Constants.OFFLINE_EMOJI}`;
                 }
-                status += time !== null ? ` [${time[1]}]` : '';
+                const timeStr = time !== null ? time[1] : (isOnline ? null : sinceLastDisconnect());
+                status += timeStr !== null ? ` [${timeStr}]` : '';
                 /* Per-player active-hours hint moved to the Report button —
                    the inline tracker UI now only shows the group-level
                    typical-play window so the list stays scannable. */
@@ -1190,6 +1208,12 @@ module.exports = {
                         .map(h => `${String(h.hour).padStart(2, '0')}:00`)
                         .join(', ');
                     block += `> 🔥 **Peak hours:** ${peakStr}\n`;
+                }
+                const week = ActivityDb.getPlaytimeSeconds(player.playerId, 7);
+                const month = ActivityDb.getPlaytimeSeconds(player.playerId, 30);
+                if (week !== null && month !== null) {
+                    block += `> ⏱ **Playtime on server:** ${Utils.formatPlaytimeHours(week / 3600)} (7d)` +
+                        ` · ${Utils.formatPlaytimeHours(month / 3600)} (30d)\n`;
                 }
                 block += '\n';
             }

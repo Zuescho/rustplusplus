@@ -65,6 +65,26 @@ const HOURS_MAX_PER_CYCLE = Config.battlemetrics.trackerHoursPerCycle;
    we call it a broken endpoint rather than a run of private profiles. */
 const PLAYTIME_EMPTY_WARN_THRESHOLD = 10;
 
+/* Battlemetrics sessions. Already-synced players are caught up every
+   SESSION_SYNC_INTERVAL_MS in batches of SESSION_BATCH_SIZE per server — one
+   request for a whole tracker, however many players it holds. Newly tracked
+   players are backfilled in smaller batches, one batch per cycle, because a
+   month of history can run to several pages. */
+const SESSION_SYNC_INTERVAL_MS = Config.battlemetrics.trackerSessionSyncMs;
+const SESSION_BACKFILL_DAYS = Config.battlemetrics.trackerSessionBackfillDays;
+const SESSION_BATCH_SIZE = 50;
+const SESSION_BACKFILL_BATCH_SIZE = 10;
+const SESSION_BACKFILL_BATCHES_PER_CYCLE = 1;
+const SESSION_MAX_PAGES = 20;
+/* Soonest the pattern recompute runs after a backfill. */
+const SESSION_BACKFILL_RECOMPUTE_MS = 10 * 60 * 1000;
+/* Re-read a little of what was already synced: a session can reach
+   Battlemetrics slightly after it started. */
+const SESSION_OVERLAP_SEC = 10 * 60;
+/* Battlemetrics rejects a range that ends in the future, so stay clear of
+   any clock skew between us and them. */
+const SESSION_RANGE_END_LAG_SEC = 60;
+
 /* The UPDATE button's deep heal makes one rate-limited Battlemetrics request
    per placeholder, and a click can be repeated. Without these it is the only
    unbounded per-player request loop left on the tracker path: 40 placeholders
@@ -87,6 +107,7 @@ const _warnedDuplicateLinks = new Set();
 let _playtimeEverSucceeded = false;
 let _playtimeConsecutiveEmpty = 0;
 let _warnedPlaytimeUnavailable = false;
+let _lastSessionSyncAt = 0;
 /* Battlemetrics ids the deep heal has already asked about and got nothing for.
    Without this every repeat click re-issues the whole set. */
 const _deepHealMisses = new Map();
@@ -146,6 +167,16 @@ module.exports = {
         catch (e) {
             client.log(client.intlGet(null, 'errorCap'),
                 `Tracker playtime pass failed: ${e.message}`, 'error');
+        }
+
+        /* Same footing as the playtime pass: history, not notifications, so
+           a failure here is logged and the cycle carries on. */
+        try {
+            await module.exports.runSessionPass(client);
+        }
+        catch (e) {
+            client.log(client.intlGet(null, 'errorCap'),
+                `Tracker session sync failed: ${e.message}`, 'error');
         }
 
         for (const guildItem of client.guilds.cache) {
@@ -1083,6 +1114,127 @@ module.exports = {
         }
 
         for (const [guildId, instance] of dirtyGuilds) client.setInstance(guildId, instance);
+    },
+
+    /**
+     * Every Battlemetrics player on an active tracker, grouped by the server
+     * the tracker watches — sessions are fetched per server.
+     *
+     * @param {object} client The Discord client.
+     * @returns {Map<string, {bmInstance: object, playerIds: Set<string>}>}
+     */
+    collectSessionCandidates: function (client) {
+        const byServer = new Map();
+
+        for (const guildItem of client.guilds.cache) {
+            const instance = client.getInstance(guildItem[0]);
+            if (!instance || !instance.trackers) continue;
+
+            for (const tracker of Object.values(instance.trackers)) {
+                if (!_isTrackerActive(tracker)) continue;
+                if (tracker.battlemetricsId === null) continue;
+
+                const bmInstance = client.battlemetricsInstances[tracker.battlemetricsId];
+                if (!bmInstance || !bmInstance.lastUpdateSuccessful) continue;
+
+                const key = `${tracker.battlemetricsId}`;
+                if (!byServer.has(key)) byServer.set(key, { bmInstance: bmInstance, playerIds: new Set() });
+                for (const player of tracker.players) {
+                    if (player.playerId) byServer.get(key).playerIds.add(`${player.playerId}`);
+                }
+            }
+        }
+
+        return byServer;
+    },
+
+    /**
+     * Pull tracked players' sessions from Battlemetrics into the activity DB.
+     *
+     * Players already synced are caught up from where they left off, reaching
+     * back to the oldest session still open (the range filter matches on
+     * session start, so that is the only way to see it close). Players with
+     * no coverage yet get SESSION_BACKFILL_DAYS of history. Coverage is only
+     * advanced for a batch whose request succeeded, so a failed sync is simply
+     * retried from the same point next time.
+     */
+    runSessionPass: async function (client) {
+        if (SESSION_SYNC_INTERVAL_MS === 0) return;
+
+        const nowMs = Date.now();
+        const catchUp = (nowMs - _lastSessionSyncAt) >= SESSION_SYNC_INTERVAL_MS;
+        const nowSec = Math.floor(nowMs / 1000) - SESSION_RANGE_END_LAG_SEC;
+        const backfillFrom = nowSec - SESSION_BACKFILL_DAYS * 86400;
+        let backfillBudget = SESSION_BACKFILL_BATCHES_PER_CYCLE;
+        let backfilled = false;
+
+        const chunk = (arr, size) => {
+            const out = [];
+            for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+            return out;
+        };
+
+        for (const [serverId, { bmInstance, playerIds }] of module.exports.collectSessionCandidates(client)) {
+            const ids = Array.from(playerIds);
+            const sync = ActivityDb.getSessionSync(serverId, ids);
+
+            if (catchUp) {
+                for (const batch of chunk(ids.filter(id => sync.has(id)), SESSION_BATCH_SIZE)) {
+                    let since = Math.min(...batch.map(id => sync.get(id).syncedUntil)) - SESSION_OVERLAP_SEC;
+                    const open = ActivityDb.getOldestOpenSessionStart(serverId, batch, backfillFrom);
+                    if (open !== null) since = Math.min(since, open);
+                    since = Math.max(since, backfillFrom);
+                    if (since >= nowSec) continue;
+
+                    const result = await bmInstance.getPlayerSessions(batch, since, nowSec, SESSION_MAX_PAGES);
+                    if (!result) continue;
+                    ActivityDb.upsertSessions(result.sessions);
+
+                    /* Newest first, so a truncated answer is still complete
+                       from its oldest session onward. */
+                    const completeFrom = result.complete || result.sessions.length === 0
+                        ? since : Math.min(...result.sessions.map(s => s.startAt));
+                    ActivityDb.setSessionSync(serverId, batch.map(id => {
+                        const prev = sync.get(id);
+                        return {
+                            playerId: id,
+                            /* A gap longer than what we could re-read leaves a
+                               hole, so coverage restarts after it. */
+                            syncedFrom: prev.syncedUntil >= completeFrom ? prev.syncedFrom : completeFrom,
+                            syncedUntil: nowSec
+                        };
+                    }));
+                }
+            }
+
+            for (const batch of chunk(ids.filter(id => !sync.has(id)), SESSION_BACKFILL_BATCH_SIZE)) {
+                if (backfillBudget <= 0) break;
+                backfillBudget -= 1;
+
+                let completeFrom = nowSec;
+                if (backfillFrom < nowSec) {
+                    const result = await bmInstance.getPlayerSessions(batch, backfillFrom, nowSec, SESSION_MAX_PAGES);
+                    if (!result) continue;
+                    ActivityDb.upsertSessions(result.sessions);
+                    completeFrom = result.complete || result.sessions.length === 0
+                        ? backfillFrom : Math.min(...result.sessions.map(s => s.startAt));
+                }
+                ActivityDb.setSessionSync(serverId,
+                    batch.map(id => ({ playerId: id, syncedFrom: completeFrom, syncedUntil: nowSec })));
+                backfilled = true;
+            }
+        }
+
+        if (catchUp) _lastSessionSyncAt = nowMs;
+        /* A backfilled player's active hours shouldn't wait for the daily
+           recompute — that is the whole point of backfilling — but a large
+           roster backfills over many cycles, so bring the recompute forward
+           to at most once per SESSION_BACKFILL_RECOMPUTE_MS instead of
+           running it every cycle. */
+        if (backfilled) {
+            _lastActivityRecomputeAt = Math.min(_lastActivityRecomputeAt,
+                nowMs - ACTIVITY_RECOMPUTE_INTERVAL_MS + SESSION_BACKFILL_RECOMPUTE_MS);
+        }
     },
 
     /**
