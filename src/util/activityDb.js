@@ -93,6 +93,24 @@ function init() {
                 tracker_id TEXT PRIMARY KEY,
                 last_fired_at INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS player_sessions (
+                session_id TEXT PRIMARY KEY,
+                player_id TEXT NOT NULL,
+                server_id TEXT NOT NULL,
+                start_at INTEGER NOT NULL,
+                stop_at INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_player_sessions_player_start
+                ON player_sessions(player_id, start_at);
+
+            CREATE TABLE IF NOT EXISTS session_sync (
+                player_id TEXT NOT NULL,
+                server_id TEXT NOT NULL,
+                synced_from INTEGER NOT NULL,
+                synced_until INTEGER NOT NULL,
+                PRIMARY KEY (player_id, server_id)
+            );
         `);
     }
     catch (e) {
@@ -129,11 +147,153 @@ function purgeOld(daysToKeep = 30) {
     if (!isAvailable()) return 0;
     const cutoff = Math.floor(Date.now() / 1000) - daysToKeep * 86400;
     const res = db.prepare('DELETE FROM activity_log WHERE checked_at < ?').run(cutoff);
+    /* Sessions follow the same retention. Coverage is moved up with them so a
+       purged stretch isn't later read as "observed and offline". */
+    /* A session still open after the whole retention window never saw its
+       close (it started before what a sync reaches back for), and would
+       otherwise be counted as online forever. */
+    db.prepare('DELETE FROM player_sessions WHERE (stop_at IS NOT NULL AND stop_at < ?) OR (stop_at IS NULL AND start_at < ?)')
+        .run(cutoff, cutoff);
+    db.prepare('UPDATE session_sync SET synced_from = ? WHERE synced_from < ?').run(cutoff, cutoff);
     return res.changes;
 }
 
-/* Aggregate the last `days` of activity_log into activity_patterns. Bucketing
-   is done in JS using local time so day-of-week/hour match the user's TZ. */
+/* Battlemetrics sessions.
+
+   Battlemetrics records every connect/disconnect itself, so for a player whose
+   sessions have been synced we know exactly when they were online — including
+   while the bot was down, and for the whole backfill window before they were
+   first tracked. `session_sync` holds, per (player, server), the stretch of
+   time we have complete session data for; inside that stretch, no session
+   means offline. Everything below prefers sessions and falls back to the
+   per-minute activity_log for players that have no coverage yet. */
+
+function upsertSessions(sessions) {
+    if (!isAvailable() || sessions.length === 0) return;
+    const upsert = db.prepare(
+        `INSERT INTO player_sessions (session_id, player_id, server_id, start_at, stop_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET stop_at = excluded.stop_at`
+    );
+    db.transaction((rows) => {
+        for (const s of rows) {
+            upsert.run(String(s.id), String(s.playerId), String(s.serverId), s.startAt, s.stopAt);
+        }
+    })(sessions);
+}
+
+/* Map playerId -> { syncedFrom, syncedUntil } for the players that have
+   session coverage on `serverId`. */
+function getSessionSync(serverId, playerIds) {
+    const result = new Map();
+    if (!isAvailable() || playerIds.length === 0) return result;
+    const select = db.prepare(
+        'SELECT synced_from, synced_until FROM session_sync WHERE player_id = ? AND server_id = ?');
+    for (const id of playerIds) {
+        const row = select.get(String(id), String(serverId));
+        if (row) result.set(String(id), { syncedFrom: row.synced_from, syncedUntil: row.synced_until });
+    }
+    return result;
+}
+
+function setSessionSync(serverId, entries) {
+    if (!isAvailable() || entries.length === 0) return;
+    const upsert = db.prepare(
+        'INSERT OR REPLACE INTO session_sync (player_id, server_id, synced_from, synced_until) VALUES (?, ?, ?, ?)');
+    db.transaction((rows) => {
+        for (const e of rows) upsert.run(String(e.playerId), String(serverId), e.syncedFrom, e.syncedUntil);
+    })(entries);
+}
+
+/* Earliest start of a still-open session among `playerIds` on `serverId`, not
+   older than `notBefore`, or null. Battlemetrics filters a time range on
+   session start, so the next sync has to reach back this far to see the
+   session close. */
+function getOldestOpenSessionStart(serverId, playerIds, notBefore) {
+    if (!isAvailable() || playerIds.length === 0) return null;
+    const placeholders = playerIds.map(() => '?').join(',');
+    const row = db.prepare(
+        `SELECT MIN(start_at) AS s FROM player_sessions
+         WHERE server_id = ? AND stop_at IS NULL AND start_at >= ? AND player_id IN (${placeholders})`
+    ).get(String(serverId), notBefore, ...playerIds.map(String));
+    return row && row.s !== null ? row.s : null;
+}
+
+/* Combined coverage across every server the player is synced on, or null. */
+function getSessionCoverage(playerId) {
+    if (!isAvailable()) return null;
+    const row = db.prepare(
+        'SELECT MIN(synced_from) AS f, MAX(synced_until) AS u FROM session_sync WHERE player_id = ?'
+    ).get(String(playerId));
+    if (!row || row.f === null || row.u === null || row.u <= row.f) return null;
+    return { from: row.f, until: row.u };
+}
+
+/* Sessions clipped to [fromSec, untilSec] and merged, as [start, stop] pairs.
+   A session still open is taken to run until `untilSec`, the end of what we
+   have synced. */
+function _sessionIntervals(playerId, fromSec, untilSec) {
+    const rows = db.prepare(
+        `SELECT start_at, stop_at FROM player_sessions
+         WHERE player_id = ? AND start_at < ? AND (stop_at IS NULL OR stop_at > ?)
+         ORDER BY start_at`
+    ).all(String(playerId), untilSec, fromSec);
+
+    const merged = [];
+    for (const r of rows) {
+        const start = Math.max(r.start_at, fromSec);
+        const stop = Math.min(r.stop_at === null ? untilSec : r.stop_at, untilSec);
+        if (stop <= start) continue;
+        const last = merged[merged.length - 1];
+        if (last && start <= last[1]) last[1] = Math.max(last[1], stop);
+        else merged.push([start, stop]);
+    }
+    return merged;
+}
+
+/* Calls `fn(dow, hour, seconds)` for each local-time hour slice of [from, to). */
+function _forEachHourSlice(fromSec, toSec, fn) {
+    let t = fromSec;
+    while (t < toSec) {
+        const date = new Date(t * 1000);
+        const boundary = new Date(date.getTime());
+        boundary.setMinutes(60, 0, 0);
+        const next = Math.min(Math.floor(boundary.getTime() / 1000), toSec);
+        fn(date.getDay(), date.getHours(), next - t);
+        t = next;
+    }
+}
+
+/* (dow, hour) grid of { online, total } in seconds, built from sessions. */
+function _sessionGrid(playerId, fromSec, untilSec) {
+    const grid = new Array(7);
+    for (let d = 0; d < 7; d++) grid[d] = new Array(24).fill(null);
+    const cell = (dow, hour) => {
+        if (!grid[dow][hour]) grid[dow][hour] = { online: 0, total: 0 };
+        return grid[dow][hour];
+    };
+
+    _forEachHourSlice(fromSec, untilSec, (dow, hour, sec) => { cell(dow, hour).total += sec; });
+    for (const [start, stop] of _sessionIntervals(playerId, fromSec, untilSec)) {
+        _forEachHourSlice(start, stop, (dow, hour, sec) => { cell(dow, hour).online += sec; });
+    }
+    return grid;
+}
+
+/* Seconds the player spent online in the last `days`, per Battlemetrics
+   sessions, or null when there is no session coverage for that player. */
+function getPlaytimeSeconds(playerId, days) {
+    const coverage = getSessionCoverage(playerId);
+    if (!coverage) return null;
+    const from = Math.max(coverage.from, Math.floor(Date.now() / 1000) - days * 86400);
+    if (coverage.until <= from) return 0;
+    return _sessionIntervals(playerId, from, coverage.until)
+        .reduce((sum, [start, stop]) => sum + (stop - start), 0);
+}
+
+/* Aggregate the last `days` into activity_patterns. Players with session
+   coverage are built from their sessions, the rest from activity_log.
+   Bucketing is done in JS using local time so day-of-week/hour match the
+   user's TZ. */
 function recomputePatterns(days = 30) {
     if (!isAvailable()) return;
     const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
@@ -162,6 +322,25 @@ function recomputePatterns(days = 30) {
         if (row.is_online) cell.online += 1;
     }
 
+    /* Session-covered players replace their snapshot grid outright. Cells are
+       seconds here, so they're converted to minutes to keep sample_count in
+       the same unit as a snapshot-built cell (one sample per minute). */
+    const covered = db.prepare('SELECT DISTINCT player_id FROM session_sync').all();
+    for (const { player_id: playerId } of covered) {
+        const coverage = getSessionCoverage(playerId);
+        if (!coverage) continue;
+        const from = Math.max(coverage.from, cutoff);
+        if (coverage.until <= from) continue;
+        const sessionGrid = _sessionGrid(playerId, from, coverage.until);
+        for (let d = 0; d < 7; d++) {
+            for (let h = 0; h < 24; h++) {
+                const c = sessionGrid[d][h];
+                if (c) sessionGrid[d][h] = { online: c.online / 60, total: c.total / 60 };
+            }
+        }
+        grid.set(playerId, sessionGrid);
+    }
+
     const upsert = db.prepare(
         'INSERT OR REPLACE INTO activity_patterns (player_id, dow, hour, online_pct, sample_count) VALUES (?, ?, ?, ?, ?)'
     );
@@ -175,8 +354,9 @@ function recomputePatterns(days = 30) {
                 for (let hour = 0; hour < 24; hour++) {
                     const cell = weekGrid[dow][hour];
                     if (!cell) continue;
+                    if (cell.total <= 0) continue;
                     const pct = (cell.online / cell.total) * 100;
-                    upsert.run(playerId, dow, hour, pct, cell.total);
+                    upsert.run(playerId, dow, hour, pct, Math.round(cell.total));
                 }
             }
         }
@@ -192,13 +372,21 @@ function getPlayerPattern(playerId) {
 }
 
 /* Total samples logged for a player; used to gate the active-hours hint until
-   there's enough data to be meaningful. */
+   there's enough data to be meaningful. Session coverage counts as one sample
+   per covered minute — the unit activity_log samples are taken at — so a
+   player backfilled from Battlemetrics clears the gates straight away. */
 function getSampleCount(playerId) {
     if (!isAvailable()) return 0;
     const row = db.prepare(
         'SELECT COUNT(*) AS c FROM activity_log WHERE player_id = ?'
     ).get(String(playerId));
-    return row ? row.c : 0;
+    const snapshots = row ? row.c : 0;
+
+    const coverage = getSessionCoverage(playerId);
+    if (!coverage) return snapshots;
+    const from = Math.max(coverage.from, Math.floor(Date.now() / 1000) - 30 * 86400);
+    const coveredMinutes = Math.max(0, Math.floor((coverage.until - from) / 60));
+    return Math.max(snapshots, coveredMinutes);
 }
 
 /* Convert hour-of-week grid into a compact "Mon-Fri 18:00-23:00" style hint.
@@ -422,6 +610,18 @@ function pruneAlertsExcept(validKeys) {
    retention window began. */
 function getLastTransitions(playerId) {
     if (!isAvailable()) return { lastConnectedAt: null, lastDisconnectedAt: null };
+
+    /* Battlemetrics sessions carry the exact instants, gaps or not. */
+    if (getSessionCoverage(playerId)) {
+        const s = db.prepare(
+            'SELECT MAX(start_at) AS c, MAX(stop_at) AS d FROM player_sessions WHERE player_id = ?'
+        ).get(String(playerId));
+        return {
+            lastConnectedAt: s && s.c !== null ? s.c : null,
+            lastDisconnectedAt: s && s.d !== null ? s.d : null
+        };
+    }
+
     const rows = db.prepare(
         'SELECT is_online, checked_at FROM activity_log WHERE player_id = ? ORDER BY checked_at DESC'
     ).all(String(playerId));
@@ -606,6 +806,12 @@ module.exports = {
     isAvailable,
     logSnapshot,
     purgeOld,
+    upsertSessions,
+    getSessionSync,
+    setSessionSync,
+    getOldestOpenSessionStart,
+    getSessionCoverage,
+    getPlaytimeSeconds,
     recomputePatterns,
     getSampleCount,
     getPlayerActiveHint,

@@ -221,6 +221,22 @@ class Battlemetrics {
     }
 
     /**
+     *  Construct the Battlemetrics API call for the sessions of several players
+     *  on this server. `filter[range]` matches on session start, and both ends
+     *  must lie in the past.
+     *  @param {Array<string>} playerIds The ids of the players.
+     *  @param {number} fromSec Range start, unix seconds.
+     *  @param {number} toSec Range end, unix seconds.
+     *  @return {string} The Battlemetrics API call string.
+     */
+    GET_PLAYER_SESSIONS_API_CALL(playerIds, fromSec, toSec) {
+        const from = new Date(fromSec * 1000).toISOString();
+        const to = new Date(toSec * 1000).toISOString();
+        return `https://api.battlemetrics.com/sessions?filter[players]=${playerIds.join(',')}` +
+            `&filter[servers]=${this.id}&filter[range]=${from}:${to}&page[size]=100`;
+    }
+
+    /**
      *  Construct the Battlemetrics API call for getting most time played data.
      *  @param {number} id The id of the server.
      *  @param {number} days The number of days before today to look.
@@ -622,6 +638,47 @@ class Battlemetrics {
 
         const seconds = this.#parseRustPlaytimeApiResponse(data);
         return seconds === null ? null : seconds / 3600;
+    }
+
+    /**
+     *  Get the sessions of several players on this server that started within
+     *  [fromSec, toSec], newest first, following pagination up to `maxPages`.
+     *
+     *  @param {Array<string>} playerIds The ids of the players.
+     *  @param {number} fromSec Range start, unix seconds.
+     *  @param {number} toSec Range end, unix seconds.
+     *  @param {number} maxPages Page cap; each page holds up to 100 sessions.
+     *  @return {object|null} { sessions, complete } — `complete` is false when
+     *      the page cap cut the oldest sessions off — or null when a request
+     *      failed.
+     */
+    async getPlayerSessions(playerIds, fromSec, toSec, maxPages = 10) {
+        const sessions = [];
+        let url = this.GET_PLAYER_SESSIONS_API_CALL(playerIds, fromSec, toSec);
+        for (let page = 0; page < maxPages; page++) {
+            const data = await this.request(url);
+            if (!data || !Array.isArray(data.data)) return null;
+
+            for (const entry of data.data) {
+                const attributes = entry.attributes || {};
+                const relationships = entry.relationships || {};
+                const playerId = relationships.player?.data?.id;
+                const startAt = Date.parse(attributes.start);
+                if (!entry.id || !playerId || isNaN(startAt)) continue;
+                const stopAt = attributes.stop ? Date.parse(attributes.stop) : NaN;
+                sessions.push({
+                    id: entry.id,
+                    playerId: `${playerId}`,
+                    serverId: `${relationships.server?.data?.id ?? this.id}`,
+                    startAt: Math.floor(startAt / 1000),
+                    stopAt: isNaN(stopAt) ? null : Math.floor(stopAt / 1000)
+                });
+            }
+
+            url = data.links?.next;
+            if (!url) return { sessions: sessions, complete: true };
+        }
+        return { sessions: sessions, complete: false };
     }
 
     /**

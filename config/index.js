@@ -60,6 +60,15 @@ module.exports = {
            Battlemetrics queue, however many players are tracked — a big roster
            takes longer to fill in rather than arriving as a burst. */
         trackerHoursPerCycle: envInt('RPP_TRACKER_HOURS_PER_CYCLE', 1, 0),
+        /* How often tracked players' Battlemetrics sessions are synced. One
+           request covers up to 50 players of one server, so the cost scales
+           with servers rather than players. 0 switches session sync off and
+           the activity history falls back to the bot's own per-minute
+           snapshots. */
+        trackerSessionSyncMs: envInt('RPP_TRACKER_SESSION_SYNC_MS', 5 * 60 * 1000, 0),
+        /* How many days of history a newly tracked player is backfilled with.
+           Capped at the 30 days the activity history is kept for. */
+        trackerSessionBackfillDays: Math.min(envInt('RPP_TRACKER_SESSION_BACKFILL_DAYS', 30, 0), 30),
         /* How long a scraped Steam persona name stays reusable, for the callers
            that opt into the cache (the tracker resolver and the blacklist /
            whitelist listings). 0 disables the cache. */

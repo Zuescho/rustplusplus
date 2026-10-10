@@ -59,20 +59,6 @@ module.exports = {
         await SmartSwitchHandler.handler(rustplus, client, time.time);
         TimeHandler.handler(rustplus, client, time.time);
 
-        /* Broadcast day/night transition messages at fixed in-game hours */
-        if (!rustplus.isFirstPoll) {
-            const prevTime = rustplus.time.time;
-            const newTime = time.time.time;
-            const sunset = time.time.sunset;
-            const sunrise = time.time.sunrise;
-            if (prevTime < sunset && newTime >= sunset) {
-                rustplus.sendInGameMessage(client.intlGet(rustplus.guildId, 'gettingDark'));
-            }
-            if (prevTime < sunrise && newTime >= sunrise) {
-                rustplus.sendInGameMessage(client.intlGet(rustplus.guildId, 'gettingLight'));
-            }
-        }
-
         rustplus.time.updateTime(time.time);
         rustplus.info.updateInfo(info.info);
         rustplus.mapMarkers.updateMapMarkers(mapMarkers.mapMarkers);
